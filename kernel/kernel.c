@@ -5,6 +5,10 @@
 #include "../boot/multiboot.h"
 #include "../config.h"
 #include "../drivers/vga.h"
+#include "../mm/pmm.h"
+
+extern u32         magic; /* Multiboot magic number */
+extern phys_addr_t mbi;   /* Multiboot information structure address */
 
 void __noreturn kmain(void) {
     vga_clear_screen(VGA_BLACK_COLOR);
@@ -21,5 +25,17 @@ void __noreturn kmain(void) {
     irq_clear_mask(1);
     __asm__ volatile ("sti");
     vga_print_string("Initialized interrupts\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+
+    if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
+        PANIC("Error: Invalid multiboot magic number");
+
+    multiboot_info_t* mbinfo = (multiboot_info_t*)(__va(mbi));
+    if(!(mbinfo->flags >> 6 & 0x1))
+        PANIC("Error: Invalid mmap provided by GRUB bootloader");
+
+    pmm_init(mbinfo);
+    vga_print_string("Initialized PMM\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+
+    pmm_free_init_section();
     for(;;);
 }

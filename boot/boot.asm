@@ -128,9 +128,11 @@ higher_half_kernel:
     jmp .hang
 
 section .data
+global magic
 magic:
     dd 0
 
+global mbi
 mbi:
     dd 0
 
