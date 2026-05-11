@@ -139,10 +139,12 @@ gdt_desc:
     dd gdt_start
 
 align 4
+global gdt_start
 gdt_start:
 gdt_null_desc:
     dq 0x0000000000000000
 
+global gdt_kernel_code_seg_desc
 gdt_kernel_code_seg_desc:
     dw 0xFFFF
     dw 0x0000
