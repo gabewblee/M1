@@ -7,8 +7,8 @@ LDFLAGS = -T boot/linker.ld
 
 .PHONY: all run clean
 
-all: build/boot.o build/idt.o build/isr.o build/kernel.o build/kheap.o build/panic.o build/pic.o build/pmm.o build/string.o build/vga.o build/vmm.o
-	$(I686_ELF_LD) $(LDFLAGS) build/boot.o build/idt.o build/isr.o build/kernel.o build/kheap.o build/panic.o build/pic.o build/pmm.o build/string.o build/vga.o build/vmm.o -o iso/boot/m1.bin
+all: build/boot.o build/gdt.o build/idt.o build/isr.o build/kernel.o build/kheap.o build/panic.o build/pic.o build/pmm.o build/string.o build/switch.o build/task.o build/vga.o build/vmm.o
+	$(I686_ELF_LD) $(LDFLAGS) build/boot.o build/gdt.o build/idt.o build/isr.o build/kernel.o build/kheap.o build/panic.o build/pic.o build/pmm.o build/string.o build/switch.o build/task.o build/vga.o build/vmm.o -o iso/boot/m1.bin
 
 run:
 	grub-mkrescue -o build/m1.iso iso
@@ -16,6 +16,9 @@ run:
 
 build/boot.o: boot/boot.asm
 	$(NASM) -f elf32 boot/boot.asm -o build/boot.o
+
+build/gdt.o: kernel/gdt.c
+	$(I686_ELF_GCC) $(CFLAGS) -c kernel/gdt.c -o build/gdt.o
 
 build/idt.o: kernel/idt.c
 	$(I686_ELF_GCC) $(CFLAGS) -c kernel/idt.c -o build/idt.o
@@ -40,6 +43,12 @@ build/pmm.o: mm/pmm.c
 
 build/string.o: lib/string.c
 	$(I686_ELF_GCC) $(CFLAGS) -c lib/string.c -o build/string.o
+
+build/switch.o: kernel/switch.asm
+	$(NASM) -f elf32 kernel/switch.asm -o build/switch.o
+
+build/task.o: kernel/task.c
+	$(I686_ELF_GCC) $(CFLAGS) -c kernel/task.c -o build/task.o
 
 build/vga.o: drivers/vga.c
 	$(I686_ELF_GCC) $(CFLAGS) -c drivers/vga.c -o build/vga.o

@@ -1,6 +1,7 @@
 #include "idt.h"
 #include "panic.h"
 #include "pic.h"
+#include "task.h"
 
 #include "../drivers/vga.h"
 #include "../io/io.h"
@@ -23,19 +24,25 @@ typedef struct idtr_t {
 } __packed idtr_t;
 
 typedef void (*irq_handler_func_t)(void);                /* IRQ handler function pointer type */
+static void irq_pit_handler(void);
 static void irq_dummy_handler(void);
 
 __aligned(0x10)
 static idt_entry_t        idt[IDT_NUM_DESCRIPTORS];      /* Interrupt Descriptor Table */
 static idtr_t             idtr;                          /* Interrupt Descriptor Table Register */
 static irq_handler_func_t irq_handlers[IDT_NUM_IRQS] = { /* Array of IRQ handler function pointers */
-    [0 ... (IDT_NUM_IRQS - 1)] = irq_dummy_handler
+    [0]                        = irq_pit_handler,
+    [1 ... (IDT_NUM_IRQS - 1)] = irq_dummy_handler
 };
 
 extern u32                isr_stub_table[];              /* ISR stub virtual addresses */
 extern u32                irq_stub_table[];              /* IRQ stub virtual addresses */
 extern u8                 gdt_start[];                   /* Start of the GDT in virtual memory */
 extern u8                 gdt_kernel_code_seg_desc[];    /* Start of the KCS descriptor in virtual memory */
+
+static void irq_pit_handler(void) {
+    sched_tick();
+}
 
 static void irq_dummy_handler(void) {
     ;

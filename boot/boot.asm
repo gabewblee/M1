@@ -155,6 +155,7 @@ gdt_kernel_code_seg_desc:
     db 0xCF
     db 0x00
 
+global gdt_kernel_data_seg_desc
 gdt_kernel_data_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -179,6 +180,7 @@ gdt_user_data_seg_desc:
     db 0xCF
     db 0x00
 
+global gdt_task_state_seg_desc
 gdt_task_state_seg_desc:
     dq 0x0000000000000000
 
@@ -188,4 +190,5 @@ section .bss
 align 16
 kernel_stack_bottom:
     resb 8192
+global kernel_stack_top
 kernel_stack_top:
