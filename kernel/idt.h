@@ -4,7 +4,7 @@
 
 #include "../config.h"
 
-typedef struct {
+typedef struct interrupt_frame_t {
     u32         edi, esi, ebp, esp, ebx, edx, ecx, eax; /* General purpose registers */
     u32         int_no;                                 /* Interrupt number */
     u32         err_code;                               /* Error code */

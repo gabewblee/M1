@@ -31,19 +31,19 @@ static __always_inline void pmm_bitmap_unmark_bit(u32 bit) {
     bitmap[__word_shr(bit)] &= ~(__one_shl(bit & 31));
 }
 
-static inline void pmm_bitmap_mark_range(phys_addr_t base, u32 len) {
+static void pmm_bitmap_mark_range(phys_addr_t base, u32 len) {
     phys_addr_t start = PMM_FRM_ALIGN_DOWN(base), end = PMM_FRM_ALIGN_UP(base + len);
     for (phys_addr_t paddr = start; paddr < end; paddr += PG_SZ)
         pmm_bitmap_mark_bit(__pg_shr(paddr));
 }
 
-static inline void pmm_bitmap_unmark_range(phys_addr_t base, u32 len) {
+static void pmm_bitmap_unmark_range(phys_addr_t base, u32 len) {
     phys_addr_t start = PMM_FRM_ALIGN_UP(base), end = PMM_FRM_ALIGN_DOWN(base + len);
     for (phys_addr_t paddr = start; paddr < end; paddr += PG_SZ)
         pmm_bitmap_unmark_bit(__pg_shr(paddr));
 }
 
-static u32 __hot pmm_find_unmarked_bit(u32 start, u32 end) {
+static u32 pmm_find_unmarked_bit(u32 start, u32 end) {
     u32 first = __word_shr(start), last = __word_shr(end + 31);
     for (u32 word = first; word < last; word++) {
         u32 mask = ~bitmap[word];
@@ -67,6 +67,10 @@ static u32 __hot pmm_find_unmarked_bit(u32 start, u32 end) {
     return PMM_MAX_NUM_FRMS;
 }
 
+void pmm_free_init_section(void) {
+    pmm_bitmap_unmark_range(__pa(_sinit), (u32)(_einit - _sinit));
+}
+
 phys_addr_t __hot pmm_alloc_frm(void) {
     u32 bit = pmm_find_unmarked_bit(last, PMM_MAX_NUM_FRMS);
     if (bit >= PMM_MAX_NUM_FRMS && (bit = pmm_find_unmarked_bit(0, last)) >= PMM_MAX_NUM_FRMS)
@@ -82,10 +86,6 @@ void __hot pmm_free_frm(phys_addr_t paddr) {
         return;
 
     pmm_bitmap_unmark_bit(__pg_shr(paddr));
-}
-
-void pmm_free_init_section(void) {
-    pmm_bitmap_unmark_range(__pa(_sinit), (u32)(_einit - _sinit));
 }
 
 void __init pmm_init(multiboot_info_t* mbinfo) {

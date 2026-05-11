@@ -23,7 +23,7 @@ typedef struct idtr_t {
 } __packed idtr_t;
 
 typedef void (*irq_handler_func_t)(void);                /* IRQ handler function pointer type */
-static inline void irq_dummy_handler(void);
+static void irq_dummy_handler(void);
 
 __aligned(0x10)
 static idt_entry_t        idt[IDT_NUM_DESCRIPTORS];      /* Interrupt Descriptor Table */
@@ -37,21 +37,17 @@ extern u32                irq_stub_table[];              /* IRQ stub virtual add
 extern u8                 gdt_start[];                   /* Start of the GDT in virtual memory */
 extern u8                 gdt_kernel_code_seg_desc[];    /* Start of the KCS descriptor in virtual memory */
 
-static inline void irq_dummy_handler(void) {
+static void irq_dummy_handler(void) {
     ;
 }
 
-static inline void idt_set_desc(u8 vector, virt_addr_t isr, u8 flags) {
+static void idt_set_desc(u8 vector, virt_addr_t isr, u8 flags) {
     idt_entry_t* descriptor = &idt[vector];
     descriptor->isr_low     = isr & 0xFFFF;
     descriptor->segment     = gdt_kernel_code_seg_desc - gdt_start;
     descriptor->reserved    = 0;
     descriptor->attributes  = flags;
     descriptor->isr_high    = isr >> 16;
-}
-
-static inline void idt_load_idtr(void) {
-    __asm__ volatile ("lidt %0" : : "m"(idtr));
 }
 
 void __cold exception_handler(interrupt_frame_t* frame) {
@@ -76,5 +72,5 @@ void __init idt_init(void) {
     for (u8 vector = 0; vector < IDT_NUM_IRQS; vector++)
         idt_set_desc(vector + IDT_NUM_EXCEPTIONS, irq_stub_table[vector], 0x8E);
 
-    idt_load_idtr();
+    __asm__ volatile ("lidt %0" : : "m"(idtr));
 }

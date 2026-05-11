@@ -1,3 +1,4 @@
+#include "gdt.h"
 #include "idt.h"
 #include "panic.h"
 #include "pic.h"
@@ -5,7 +6,9 @@
 #include "../boot/multiboot.h"
 #include "../config.h"
 #include "../drivers/vga.h"
+#include "../mm/kheap.h"
 #include "../mm/pmm.h"
+#include "../mm/vmm.h"
 
 extern u32         magic; /* Multiboot magic number */
 extern phys_addr_t mbi;   /* Multiboot information structure address */
@@ -35,6 +38,12 @@ void __noreturn kmain(void) {
 
     pmm_init(mbinfo);
     vga_print_string("Initialized PMM\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+
+    vmm_init();
+    vga_print_string("Initialized VMM\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+
+    kheap_init();
+    vga_print_string("Initialized kernel heap\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
 
     pmm_free_init_section();
     for(;;);

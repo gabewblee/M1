@@ -4,6 +4,11 @@
 #include "../config.h"
 
 /**
+ * pmm_free_init_section - Free the init section
+ */
+void pmm_free_init_section(void);
+
+/**
  * pmm_alloc_frm - Allocate a memory frame
  * @return: The allocated memory frame
  */
@@ -14,11 +19,6 @@ phys_addr_t __hot pmm_alloc_frm(void);
  * @pg: The memory frame to free
  */
 void __hot pmm_free_frm(phys_addr_t pg);
-
-/**
- * pmm_free_init_section - Free the init section
- */
-void pmm_free_init_section(void);
 
 /**
  * pmm_init - Initialize the PMM
