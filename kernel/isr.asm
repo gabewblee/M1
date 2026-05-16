@@ -2,6 +2,7 @@ bits 32
 
 extern exception_handler
 extern irq_handler
+extern syscall_handler
 
 %macro isr_no_err_stub 1
 isr_stub_%+%1:
@@ -22,6 +23,27 @@ irq_stub_%+%1:
     push dword %2 ; Interrupt vector number
     jmp irq_handler_common
 %endmacro
+
+global syscall_stub
+syscall_stub:
+    push eax      ; Syscall number
+    push edi      ; Argument 5
+    push esi      ; Argument 4
+    push edx      ; Argument 3
+    push ecx      ; Argument 2
+    push ebx      ; Argument 1
+    push ebp      ; Stack base pointer
+    push esp      ; Syscall frame pointer
+    call syscall_handler
+    add esp, 4
+    pop ebp
+    pop ebx
+    pop ecx
+    pop edx
+    pop esi
+    pop edi
+    pop eax
+    iret
 
 isr_handler_common:
     pushad

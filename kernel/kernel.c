@@ -11,8 +11,8 @@
 #include "../mm/pmm.h"
 #include "../mm/vmm.h"
 
-extern u32         magic; /* Multiboot magic number */
-extern phys_addr_t mbi;   /* Multiboot information structure address */
+extern u32         magic;
+extern phys_addr_t mbi;
 
 void __noreturn kmain(void) {
     vga_clear_screen(VGA_BLACK_COLOR);

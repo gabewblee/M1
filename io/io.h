@@ -5,9 +5,9 @@
 #include "../config.h"
 
 /**
- * inb - Read a byte from an I/O port
- * @port: The port to read from
- * @return: The byte read
+ * inb - Reads a byte from an I/O port.
+ * @port: The port to read from.
+ * @return: The byte read.
  */
 static __always_inline u8 inb(u16 port) {
     u8 ret;
@@ -16,18 +16,18 @@ static __always_inline u8 inb(u16 port) {
 }
 
 /**
- * outb - Write a byte to an I/O port
- * @port: The port to write to
- * @val: The byte to write
+ * outb - Writes a byte to an I/O port.
+ * @port: The port to write to.
+ * @val: The byte to write.
  */
 static __always_inline void outb(u16 port, u8 val) {
     __asm__ volatile ("outb %b0, %w1" : : "a"(val), "Nd"(port) : "memory");
 }
 
 /**
- * inw - Read a word from an I/O port
- * @port: The port to read from
- * @return: The word read
+ * inw - Reads a word from an I/O port.
+ * @port: The port to read from.
+ * @return: The word read.
  */
 static __always_inline u16 inw(u16 port) {
     u16 ret;
@@ -36,16 +36,16 @@ static __always_inline u16 inw(u16 port) {
 }
 
 /**
- * outw - Write a word to an I/O port
- * @port: The port to write to
- * @val: The word to write
+ * outw - Writes a word to an I/O port.
+ * @port: The port to write to.
+ * @val: The word to write.
  */
 static __always_inline void outw(u16 port, u16 val) {
     __asm__ volatile ("outw %w0, %w1" : : "a"(val), "Nd"(port) : "memory");
 }
 
 /**
- * io_wait - Wait for I/O operation to complete
+ * io_wait - Waits for an I/O operation to complete.
  */
 static __always_inline void io_wait(void) {
     outb(0x80, 0);

@@ -2,7 +2,7 @@
 
 #include "../io/io.h"
 
-static u16 __pic_get_irq_reg(int ocw3) {
+static u16 _get_irq_reg(int ocw3) {
     outb(PIC1_COMMAND, ocw3);
     outb(PIC2_COMMAND, ocw3);
     return (inb(PIC2_COMMAND) << 8) | inb(PIC1_COMMAND);
@@ -81,11 +81,11 @@ void irq_clear_mask(u8 irq) {
 }
 
 u16 pic_get_irr(void) {
-    return __pic_get_irq_reg(PIC_READ_IRR);
+    return _get_irq_reg(PIC_READ_IRR);
 }
 
 u16 pic_get_isr(void) {
-    return __pic_get_irq_reg(PIC_READ_ISR);
+    return _get_irq_reg(PIC_READ_ISR);
 }
 
 void __init pic_init(u8 offset1, u8 offset2) {

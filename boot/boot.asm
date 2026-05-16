@@ -5,26 +5,22 @@ MEMINFO  equ 1 << 1
 MBFLAGS  equ MBALIGN | MEMINFO
 CHECKSUM equ -(MAGIC + MBFLAGS)
 
-; Higher half kernel macros
-%define HIGHER_HALF_OFFSET       0xC0000000
-%define __pa(x)                  ((x) - HIGHER_HALF_OFFSET)
+%define HIGHER_HALF_OFFSET   0xC0000000
+%define PG_SZ                4096
+%define _KERNEL_CODE_SEG_SEL gdt_kernel_code_seg_desc - gdt_start
+%define _KERNEL_DATA_SEG_SEL gdt_kernel_data_seg_desc - gdt_start
+%define __pa(x)              ((x) - HIGHER_HALF_OFFSET)
 
-; GDT macros
-%define KERNEL_CODE_SEG_SELECTOR gdt_kernel_code_seg_desc - gdt_start
-%define KERNEL_DATA_SEG_SELECTOR gdt_kernel_data_seg_desc - gdt_start
+extern swapper_pg_dir
+extern swapper_pg_table_cnt
+extern setup_swapper_pg_dir
 
-; System macros
-%define KERNEL_NUM_PG_TABLES     2
-%define PG_SZ                    4096
-
-; Multiboot header
 section .multiboot
 align 4
     dd MAGIC
     dd MBFLAGS
     dd CHECKSUM
 
-; Global entry point
 global _start
 _start:
     ; Save magic and multiboot information
@@ -34,8 +30,11 @@ _start:
     ; Set up stack
     mov esp, __pa(kernel_stack_top)
 
-    ; Load page directory
-    mov eax, __pa(kernel_pg_dir)
+    ; Initialize swapper kernel page directory
+    call setup_swapper_pg_dir
+
+    ; Load swapper kernel page directory
+    mov eax, __pa(swapper_pg_dir)
     mov cr3, eax
 
     ; Enable paging
@@ -47,57 +46,18 @@ _start:
     jmp higher_half_kernel
 
 section .init
-align PG_SZ
-kernel_pg_dir:
-    %assign i 0
-    %rep KERNEL_NUM_PG_TABLES
-        dd __pa(identity_pg_table_%+i) + 3
-    %assign i i+1
-    %endrep
-
-    times (768 - KERNEL_NUM_PG_TABLES) dd 0
-
-    %assign i 0
-    %rep KERNEL_NUM_PG_TABLES
-        dd __pa(kernel_pg_table_%+i) + 3
-    %assign i i+1
-    %endrep
-
-align PG_SZ
-%macro identity_pg_table_stub 1
-identity_pg_table_%+%1:
-%assign pg (%1 * 1024)
-%rep 1024
-    dd (pg * PG_SZ) + 3
-    %assign pg pg+1
-%endrep
-%endmacro
-
-align PG_SZ
-%macro kernel_pg_table_stub 1
-kernel_pg_table_%+%1:
-%assign pg (%1 * 1024)
-%rep 1024
-    dd (pg * PG_SZ) + 3
-    %assign pg pg+1
-%endrep
-%endmacro
-
-%assign i 0
-%rep KERNEL_NUM_PG_TABLES
-    identity_pg_table_stub i
-    kernel_pg_table_stub i
-%assign i i+1
-%endrep
-
 higher_half_kernel:
-    ; Unmap identity mapping
-    %assign i 0
-    %rep KERNEL_NUM_PG_TABLES
-        mov dword [kernel_pg_dir + (i * 4)], 0
-    %assign i i+1
-    %endrep
+    mov ecx, [swapper_pg_table_cnt]
+    xor edi, edi
 
+.unmap_identity_pg_tables:
+    cmp edi, ecx
+    jge .done
+    mov dword [swapper_pg_dir + edi * 4], 0
+    inc edi
+    jmp .unmap_identity_pg_tables
+    
+.done:
     ; Flush TLB
     mov eax, cr3
     mov cr3, eax
@@ -107,11 +67,11 @@ higher_half_kernel:
 
     ; GDT setup
     lgdt [gdt_desc]
-    jmp KERNEL_CODE_SEG_SELECTOR:.reload
+    jmp _KERNEL_CODE_SEG_SEL:.reload
         
 .reload:
     ; Reload segment registers
-    mov ax, KERNEL_DATA_SEG_SELECTOR
+    mov ax, _KERNEL_DATA_SEG_SEL 
     mov ds, ax
     mov es, ax
     mov fs, ax
@@ -136,16 +96,21 @@ global mbi
 mbi:
     dd 0
 
+; Global Descriptor Table descriptor (GDT descriptor)
 gdt_desc:
     dw gdt_end - gdt_start - 1
     dd gdt_start
 
 align 4
+; Global Descriptor Table start (GDT start)
 global gdt_start
 gdt_start:
+
+; Null descriptor
 gdt_null_desc:
     dq 0x0000000000000000
 
+; Kernel Code Segment descriptor (KCS descriptor)
 global gdt_kernel_code_seg_desc
 gdt_kernel_code_seg_desc:
     dw 0xFFFF
@@ -155,6 +120,7 @@ gdt_kernel_code_seg_desc:
     db 0xCF
     db 0x00
 
+; Kernel Data Segment descriptor (KDS descriptor)
 global gdt_kernel_data_seg_desc
 gdt_kernel_data_seg_desc:
     dw 0xFFFF
@@ -164,6 +130,7 @@ gdt_kernel_data_seg_desc:
     db 0xCF
     db 0x00
 
+; User Code Segment descriptor (UCS descriptor)
 gdt_user_code_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -172,6 +139,7 @@ gdt_user_code_seg_desc:
     db 0xCF
     db 0x00
 
+; User Data Segment descriptor (UDS descriptor)
 gdt_user_data_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -180,6 +148,7 @@ gdt_user_data_seg_desc:
     db 0xCF
     db 0x00
 
+; Task State Segment descriptor (TSS descriptor)
 global gdt_task_state_seg_desc
 gdt_task_state_seg_desc:
     dq 0x0000000000000000

@@ -13,51 +13,51 @@ SECTIONS
 
 	. += HIGHER_HALF_OFFSET;
 	. = ALIGN(4K);
-	_skernel = .;
+	skernel = .;
 
 	.init BLOCK(4K) : AT(ADDR(.init) - HIGHER_HALF_OFFSET)
 	{
-		_sinit = .;
+		sinit = .;
 		*(.init)
-		_einit = .;
+		einit = .;
 	}
 
 	.text BLOCK(4K) : AT(ADDR(.text) - HIGHER_HALF_OFFSET)
 	{
-		_stext = .;
+		stext = .;
 		*(.text)
-		_etext = .;
+		etext = .;
 	}
 
 	.rodata BLOCK(4K) : AT(ADDR(.rodata) - HIGHER_HALF_OFFSET)
 	{
-		_srodata = .;
+		srodata = .;
 		*(.rodata)
-		_erodata = .;
+		erodata = .;
 	}
 
 	.data BLOCK(4K) : AT(ADDR(.data) - HIGHER_HALF_OFFSET)
 	{
-		_sdata = .;
+		sdata = .;
 		*(.data)
-		_edata = .;
+		edata = .;
 	}
 
 	.bss BLOCK(4K) : AT(ADDR(.bss) - HIGHER_HALF_OFFSET)
 	{
-		_sbss = .;
+		sbss = .;
 		*(COMMON)
 		*(.bss)
-		_ebss = .;
+		ebss = .;
 	}
 
 	. = ALIGN(4K);
-	_ekernel = .;
+	ekernel = .;
 
 	.kheap BLOCK(4K) (NOLOAD) :
 	{
-		_skheap = .;
+		skheap = .;
 		. += 16M;
-		_ekheap = .;
+		ekheap = .;
 	}
 }

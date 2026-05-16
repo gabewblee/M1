@@ -5,19 +5,19 @@
 #include "../config.h"
 
 /**
- * kmalloc - Allocate a memory block
- * @sz: The size of the memory block
- * @return: The pointer to the allocated memory block
+ * kmalloc - Allocates a memory block of at least @sz bytes.
+ * @sz: The size of the memory block to allocate.
+ * @return: The pointer to the allocated memory block, or NULL on failure.
  */
  void* __hot kmalloc(size_t sz);
 
 /**
- * kfree - Free a memory block
- * @ptr: The pointer to the memory block to free
+ * kfree - Frees the memory block found at @ptr.
+ * @ptr: The pointer to the memory block to free.
  */
 void __hot kfree(void* ptr);
 
 /**
- * kheap_init - Initialize the kernel heap
+ * kheap_init - Initializes the kernel heap.
  */
 void __init kheap_init(void);

@@ -2,52 +2,52 @@
 
 #include "../config.h"
 
-#define VGA_WIDTH  80 /* VGA text mode screen width */
-#define VGA_HEIGHT 25 /* VGA text mode screen height */
+#define _VGA_WIDTH   80
+#define _VGA_HEIGHT  25
 
-u8 vga_cur_row = 0;   /* Current cursor row */
-u8 vga_cur_col = 0;   /* Current cursor column */
+u8 vga_cur_row = 0;
+u8 vga_cur_col = 0;
 
-static void vga_update_cursor(u8 row, u8 col) {
-    u16 pos = row * VGA_WIDTH + col;
+static void update_cursor(u8 row, u8 col) {
+    u16 pos = row * _VGA_WIDTH + col;
 	outb(0x3D4, 0x0F);
 	outb(0x3D5, (u8) (pos & 0xFF));
 	outb(0x3D4, 0x0E);
 	outb(0x3D5, (u8) ((pos >> 8) & 0xFF));
 }
 
-static void vga_scroll_up(u8 bcolor) {
+static void scroll_up(u8 bcolor) {
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
     u16 blank = (u16)bcolor << 8 | ' ';
-    const int penultimate_row = (VGA_HEIGHT - 1) * VGA_WIDTH;
+    const int penultimate_row = (_VGA_HEIGHT - 1) * _VGA_WIDTH;
 
     for (int i = 0; i < penultimate_row; i++)
-        buf[i] = buf[i + VGA_WIDTH];
+        buf[i] = buf[i + _VGA_WIDTH];
 
-    for (int i = penultimate_row; i < penultimate_row + VGA_WIDTH; i++)
+    for (int i = penultimate_row; i < penultimate_row + _VGA_WIDTH; i++)
         buf[i] = blank;
 }
 
-static void vga_newline(void) {
+static void newline(void) {
     vga_cur_row++;
     vga_cur_col = 0;
-    if (vga_cur_row >= VGA_HEIGHT) {
-        vga_scroll_up(VGA_BLACK_COLOR);
-        vga_cur_row = VGA_HEIGHT - 1;
+    if (vga_cur_row >= _VGA_HEIGHT) {
+        scroll_up(VGA_BLACK_COLOR);
+        vga_cur_row = _VGA_HEIGHT - 1;
     }
-    vga_update_cursor(vga_cur_row, vga_cur_col);
+    update_cursor(vga_cur_row, vga_cur_col);
 }
 
-static void vga_tab(void) {
-    if (vga_cur_col + 4 >= VGA_WIDTH) {
-        vga_newline();
+static void tab(void) {
+    if (vga_cur_col + 4 >= _VGA_WIDTH) {
+        newline();
     } else {
         vga_cur_col += 4;
-        vga_update_cursor(vga_cur_row, vga_cur_col);
+        update_cursor(vga_cur_row, vga_cur_col);
     }
 }
 
-static void vga_backspace(void) {
+static void backspace(void) {
     if (vga_cur_row == 0 && vga_cur_col == 0)
         return;
 
@@ -55,13 +55,13 @@ static void vga_backspace(void) {
         vga_cur_col--;
     } else {
         vga_cur_row--;
-        vga_cur_col = VGA_WIDTH - 1;
+        vga_cur_col = _VGA_WIDTH - 1;
     }
 
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
     u16 blank = (u16)' ' | ((u16)((VGA_BLACK_COLOR << 4) | (VGA_WHITE_COLOR & 0x0F)) << 8);
-    buf[vga_cur_row * VGA_WIDTH + vga_cur_col] = blank;
-    vga_update_cursor(vga_cur_row, vga_cur_col);
+    buf[vga_cur_row * _VGA_WIDTH + vga_cur_col] = blank;
+    update_cursor(vga_cur_row, vga_cur_col);
 }
 
 void __cold vga_enable_cursor(u8 start, u8 end) {
@@ -125,28 +125,28 @@ void __hot vga_print_char(char c, u8 fcolor, u8 bcolor) {
         return;
 
     if (c == '\n') {
-        vga_newline();
+        newline();
         return;
     }
 
     if (c == '\t') {
-        vga_tab();
+        tab();
         return;
     }
 
     if (c == '\b') {
-        vga_backspace();
+        backspace();
         return;
     }
 
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
     u16 cell = (u16)(u8)c | ((u16)((bcolor << 4) | (fcolor & 0x0F)) << 8);
-    buf[vga_cur_row * VGA_WIDTH + vga_cur_col] = cell;
+    buf[vga_cur_row * _VGA_WIDTH + vga_cur_col] = cell;
     vga_cur_col++;
-    if (vga_cur_col >= VGA_WIDTH)
-        vga_newline();
+    if (vga_cur_col >= _VGA_WIDTH)
+        newline();
 
-    vga_update_cursor(vga_cur_row, vga_cur_col);
+    update_cursor(vga_cur_row, vga_cur_col);
 }
 
 void __hot vga_print_string(const char* str, u8 fcolor, u8 bcolor) {
@@ -156,10 +156,10 @@ void __hot vga_print_string(const char* str, u8 fcolor, u8 bcolor) {
 
 void __cold vga_clear_screen(u8 color) {
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
-    for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++)
+    for (int i = 0; i < _VGA_WIDTH * _VGA_HEIGHT; i++)
         buf[i] = (u16)color << 8 | ' ';
         
     vga_cur_row = 0;
     vga_cur_col = 0;
-    vga_update_cursor(vga_cur_row, vga_cur_col);
+    update_cursor(vga_cur_row, vga_cur_col);
 }
