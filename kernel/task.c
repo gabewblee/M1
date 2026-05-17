@@ -1,154 +1,94 @@
-#include "idt.h"
+#include <stddef.h>
+
+#include "ipc.h"
 #include "panic.h"
 #include "task.h"
+#include "thread.h"
 
+#include "../lib/string.h"
 #include "../mm/kheap.h"
 
-#define KERNEL_STACK_SZ 8192
+#define _MAX_NUM_TASKS 64
 
-task_ctrl_blk_t* cur_running_task;
+task_ctrl_blk_t* ktask;
 
-static task_queue_t ready;
-static task_queue_t zombies;
+static task_ctrl_blk_t* tasks[_MAX_NUM_TASKS];
 
-extern u8   gdt_start[];
-extern u8   gdt_kernel_code_seg_desc[];
-extern u8   kernel_stack_top[];                
-extern void task_switch(task_ctrl_blk_t* nxt); 
-extern void task_entry_trampoline(void);       
-
-static void sched_enqueue(task_queue_t* queue, task_ctrl_blk_t* task) {
-    task->nxt = NULL;
-    if (!queue->head) {
-        queue->head = task;
-        queue->tail = task;
-    } else {
-        queue->tail->nxt = task;
-        queue->tail      = task;
-    }
-}
-
-static task_ctrl_blk_t* sched_dequeue(task_queue_t* queue) {
-    if (!queue->head)
-        return NULL;
-
-    task_ctrl_blk_t* task = queue->head;
-    queue->head = task->nxt;
-    if (!queue->head)
-        queue->tail = NULL;
-
-    task->nxt = NULL;
-    return task;
-}
-
-static void sched_reap_zombies(void) {
-    task_ctrl_blk_t* zombie;
-    while ((zombie = sched_dequeue(&zombies))) {
-        kfree(zombie->kernel_stack);
-        kfree(zombie);
-    }
-}
-
-static void task_entry_stub(void) {
-    cur_running_task->entry();
-    task_cur_exit();
-}
-
-static u32* task_kernel_stack_init(u32* esp) {
-    *(--esp) = 0x202;                                       /* EFLAGS */
-    *(--esp) = (u32)(gdt_kernel_code_seg_desc - gdt_start); /* CS */
-    *(--esp) = (u32)task_entry_stub;                        /* EIP */
-    *(--esp) = (u32)task_entry_trampoline;                  /* Task entry trampoline */
-    *(--esp) = 0;                                           /* EBX */
-    *(--esp) = 0;                                           /* ESI */
-    *(--esp) = 0;                                           /* EDI */
-    *(--esp) = 0;                                           /* EBP */
-    return esp;
-}
-
-static inline u32 task_get_cr3(void) {
+static inline u32 get_cur_cr3(void) {
     u32 cr3;
-    __asm__ volatile ("mov %%cr3, %0" : "=r" (cr3));
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
     return cr3;
 }
 
-static inline u32 task_get_esp(void) {
-    u32 esp;
-    __asm__ volatile ("mov %%esp, %0" : "=r" (esp));
-    return esp;
-}
-
-void __hot sched_tick(void) {
-    sched_reap_zombies();
-    if (!cur_running_task)
-        return;
-
-    if (cur_running_task->state == TASK_STATE_RUNNING) {
-        cur_running_task->state = TASK_STATE_READY;
-        sched_enqueue(&ready, cur_running_task);
+static inline i32 alloc_task_slot(task_ctrl_blk_t* task) {
+    for (u32 id = 1; id < _MAX_NUM_TASKS; id++) {
+        if (!tasks[id]) {
+            tasks[id] = task;
+            task->id = id;
+            return (i32)id;
+        }
     }
-
-    task_ctrl_blk_t* nxt = sched_dequeue(&ready);
-    if (!nxt)
-        return;
-
-    nxt->state = TASK_STATE_RUNNING;
-    if (cur_running_task != nxt)
-        task_switch(nxt);
+    return -1;
 }
 
-void __hot __noreturn task_cur_exit(void) {
-    __asm__ volatile ("cli");
-
-    cur_running_task->state = TASK_STATE_ZOMBIE;
-    sched_enqueue(&zombies, cur_running_task);
-
-    task_ctrl_blk_t* nxt = sched_dequeue(&ready);
-    if (!nxt)
-        PANIC("Error: No tasks available after task exit");
-
-    nxt->state = TASK_STATE_RUNNING;
-    task_switch(nxt);
-    __builtin_unreachable();
+task_ctrl_blk_t* task_lookup(u32 id) {
+    return (unlikely(id >= _MAX_NUM_TASKS)) ? NULL : tasks[id];
 }
 
-u32 __hot task_init(task_entry_func_t entry) {
-    u8* kernel_stack = (u8*)kmalloc(KERNEL_STACK_SZ);
-    if (!kernel_stack)
-        return 0;
-
-    task_ctrl_blk_t* task = (task_ctrl_blk_t*)kmalloc(sizeof(task_ctrl_blk_t));
-    if (!task) {
-        kfree(kernel_stack);
-        return 0;
-    }
-
-    u32* esp = task_kernel_stack_init((u32*)(kernel_stack + KERNEL_STACK_SZ));
-
-    task->esp0         = (virt_addr_t)(kernel_stack + KERNEL_STACK_SZ);
-    task->esp          = (virt_addr_t)esp;
-    task->cr3          = task_get_cr3();
-    task->nxt          = NULL;
-    task->state        = TASK_STATE_READY;
-    task->entry        = entry;
-    task->kernel_stack = kernel_stack;
-
-    sched_enqueue(&ready, task);
-    return 1;
-}
-
-void __init multitasking_init(void) {
-    task_ctrl_blk_t* task = (task_ctrl_blk_t*)kmalloc(sizeof(task_ctrl_blk_t));
+task_ctrl_blk_t* task_create(phys_addr_t cr3) {
+    task_ctrl_blk_t* task = (task_ctrl_blk_t*)kmalloc(sizeof(*task));
     if (unlikely(!task))
-        PANIC("Error: Failed to allocate memory for task control block");
+        return NULL;
 
-    task->esp0         = (u32)kernel_stack_top;
-    task->esp          = task_get_esp();
-    task->cr3          = task_get_cr3();
-    task->nxt          = NULL;
-    task->state        = TASK_STATE_RUNNING;
-    task->entry        = NULL;
-    task->kernel_stack = NULL;
+    *task = (task_ctrl_blk_t) {
+        .id   = 0,
+        .cr3  = cr3,
+        .port = port_create(IPC_DEF_CAPACITY)
+    };
 
-    cur_running_task = task;
+    if (unlikely(!task->port)) {
+        kfree(task);
+        return NULL;
+    }
+
+    list_init(&task->threads);
+    if (unlikely(alloc_task_slot(task) < 0)) {
+        port_destroy(task->port);
+        kfree(task);
+        return NULL;
+    }
+    return task;
+}
+
+void task_destroy(task_ctrl_blk_t* task) {
+    if (unlikely(!task || task == ktask))
+        return;
+
+    if (unlikely(task->nthreads != 0))
+        PANIC("Error: Task still has live threads");
+
+    tasks[task->id] = NULL;
+    port_destroy(task->port);
+    kfree(task);
+}
+
+void __init task_init(void) {
+    task_ctrl_blk_t* task = kmalloc(sizeof(task_ctrl_blk_t));
+    if (unlikely(!task))
+        return;
+
+    *task = (task_ctrl_blk_t) {
+        .id   = 0,
+        .cr3  = get_cur_cr3(),
+        .port = port_create(IPC_DEF_CAPACITY)
+    };
+
+    if (unlikely(!task->port)) {
+        kfree(task);
+        return;
+    }
+
+    list_init(&task->threads);
+    tasks[0] = task;
+    ktask = task;
 }

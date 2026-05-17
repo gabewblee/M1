@@ -12,14 +12,14 @@ void pmm_free_init_section(void);
  * pmm_alloc_frm - Allocates a page-aligned physical frame.
  * @return: The physical address of the allocated frame, or 0 on failure.
  */
-phys_addr_t __hot pmm_alloc_frm(void);
+phys_addr_t pmm_alloc_frm(void);
 
 /**
  * pmm_free_frm - Frees the physical frame found at @paddr. No-op if 
  *                @paddr is 0.
  * @paddr: The physical address of the frame to free.
  */
-void __hot pmm_free_frm(phys_addr_t paddr);
+void pmm_free_frm(phys_addr_t paddr);
 
 /**
  * pmm_alloc_frms - Allocates @cnt physically contiguous, page-aligned
@@ -27,7 +27,7 @@ void __hot pmm_free_frm(phys_addr_t paddr);
  * @cnt: The number of contiguous frames to allocate.
  * @return: The physical address of the first frame, or 0 on failure.
  */
-phys_addr_t __hot pmm_alloc_frms(u32 cnt);
+phys_addr_t pmm_alloc_frms(u32 cnt);
 
 /**
  * pmm_free_frms - Frees @cnt physically contiguous frames starting at 
@@ -35,7 +35,7 @@ phys_addr_t __hot pmm_alloc_frms(u32 cnt);
  * @paddr: The physical address of the first frame to free.
  * @cnt: The number of frames to free.
  */
-void __hot pmm_free_frms(phys_addr_t paddr, u32 cnt);
+void pmm_free_frms(phys_addr_t paddr, u32 cnt);
 
 /**
  * pmm_init - Initializes the physical memory manager using the multiboot 

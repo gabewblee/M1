@@ -1,8 +1,8 @@
 #include "setup.h"
 
-#define _PG_FLAGS     0x03u
-#define _span_shl(x)  ((x) << 22u)
-#define _span_shr(x)  ((x) >> 22u)
+#define _PG_FLAGS    0x03u
+#define _span_shl(x) ((x) << 22u)
+#define _span_shr(x) ((x) >> 22u)
 
 __aligned(PG_SZ)
 u32 swapper_pg_dir[1024];
@@ -22,8 +22,7 @@ void __multiboot setup_swapper_pg_dir(void) {
     u32* pg_dir = (u32*)__pa(swapper_pg_dir); u32 offset = _span_shr(HIGHER_HALF_OFFSET);
     for (u32 i = 0; i < pg_table_cnt; i++) {
         phys_addr_t paddr = base + (phys_addr_t)i * PG_SZ;
-        pg_dir[i]          = paddr | _PG_FLAGS;
-        pg_dir[offset + i] = paddr | _PG_FLAGS;
+        pg_dir[i] = pg_dir[offset + i] = paddr | _PG_FLAGS;
     }
 
     *(u32*)__pa(&swapper_pg_table_cnt) = pg_table_cnt;

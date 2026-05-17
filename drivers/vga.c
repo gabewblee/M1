@@ -64,19 +64,19 @@ static void backspace(void) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void __cold vga_enable_cursor(u8 start, u8 end) {
+void vga_enable_cursor(u8 start, u8 end) {
     outb(0x3D4, 0x0A);
     outb(0x3D5, (inb(0x3D5) & 0xC0) | start);
     outb(0x3D4, 0x0B);
     outb(0x3D5, (inb(0x3D5) & 0xE0) | end);
 }
 
-void __cold vga_disable_cursor(void) {
+void vga_disable_cursor(void) {
     outb(0x3D4, 0x0A);
     outb(0x3D5, 0x20);
 }
 
-void __hot vga_print_hex(u32 num, u8 fcolor, u8 bcolor) {
+void vga_print_hex(u32 num, u8 fcolor, u8 bcolor) {
     const char hex_chars[] = "0123456789ABCDEF";
     char buffer[11];
     int i = 10;
@@ -99,7 +99,7 @@ void __hot vga_print_hex(u32 num, u8 fcolor, u8 bcolor) {
     vga_print_string(&buffer[i], fcolor, bcolor);
 }
 
-void __hot vga_print_decimal(u32 num, u8 fcolor, u8 bcolor) {
+void vga_print_decimal(u32 num, u8 fcolor, u8 bcolor) {
     char buffer[21];
     int i = 20;
     
@@ -120,7 +120,7 @@ void __hot vga_print_decimal(u32 num, u8 fcolor, u8 bcolor) {
     vga_print_string(&buffer[i + 1], fcolor, bcolor);
 }
 
-void __hot vga_print_char(char c, u8 fcolor, u8 bcolor) {
+void vga_print_char(char c, u8 fcolor, u8 bcolor) {
     if (c == '\0')
         return;
 
@@ -149,12 +149,12 @@ void __hot vga_print_char(char c, u8 fcolor, u8 bcolor) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void __hot vga_print_string(const char* str, u8 fcolor, u8 bcolor) {
+void vga_print_string(const char* str, u8 fcolor, u8 bcolor) {
     while (*str)
         vga_print_char(*str++, fcolor, bcolor);
 }
 
-void __cold vga_clear_screen(u8 color) {
+void vga_clear_screen(u8 color) {
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
     for (int i = 0; i < _VGA_WIDTH * _VGA_HEIGHT; i++)
         buf[i] = (u16)color << 8 | ' ';

@@ -15,13 +15,13 @@ typedef struct interrupt_frm_t {
  * exception_handler - Exception handler.
  * @frm: The pointer to the interrupt stack frame.
  */
-void __cold exception_handler(interrupt_frm_t* frm);
+void exception_handler(interrupt_frm_t* frm);
 
 /**
  * irq_handler - Interrupt handler.
  * @frm: The pointer to the interrupt stack frame.
  */
-void __hot irq_handler(interrupt_frm_t* frm);
+void irq_handler(interrupt_frm_t* frm);
 
 /**
  * idt_init - Initialize the IDT.

@@ -8,11 +8,12 @@
 #include "../kernel/panic.h"
 #include "../lib/string.h"
 
-#define _PG_RW_FLAG                   0x02
-#define _PG_USER_FLAG                 0x04
-#define _PG_GLOBAL_FLAG               0x100
-#define _PG_DIR_SELF_ENTRY            1023u
-#define _PG_TABLE_VADDR(pg_table_idx) ((virt_addr_t)((_PG_DIR_SELF_ENTRY << 22u) | ((pg_table_idx) << 12u)))
+#define _PG_RW_FLAG                 0x02
+#define _PG_USER_FLAG               0x04
+#define _PG_GLOBAL_FLAG             0x100
+#define _PG_DIR_SELF_ENTRY          1023u
+#define _get_pg_table(pg_table_idx) ((virt_addr_t)((_PG_DIR_SELF_ENTRY << 22u) | ((pg_table_idx) << 12u)))
+#define _kernel_pg_dir              (*(pg_dir_t*)swapper_pg_dir)
 
 typedef struct pg_dir_entry_t {
     u8          present   : 1;
@@ -51,14 +52,12 @@ typedef struct pg_table_t {
 
 extern u32 swapper_pg_dir[1024];
 
-#define kernel_pg_dir (*(pg_dir_t*)swapper_pg_dir)
-
 static inline u32 get_pg_dir_idx(virt_addr_t vaddr) {
     return vaddr >> 22;
 }
 
 static inline pg_dir_entry_t* get_pg_dir_entry(u32 pg_dir_idx) {
-    return &kernel_pg_dir.entries[pg_dir_idx];
+    return &_kernel_pg_dir.entries[pg_dir_idx];
 }
 
 static inline void set_pg_dir_entry(pg_dir_entry_t* entry, phys_addr_t paddr, u32 flags) {
@@ -68,16 +67,12 @@ static inline void set_pg_dir_entry(pg_dir_entry_t* entry, phys_addr_t paddr, u3
     entry->paddr   = pg_shr(paddr);
 }
 
-static inline pg_table_t* get_pg_table(u32 pg_dir_idx) {
-    return (pg_table_t*)_PG_TABLE_VADDR(pg_dir_idx);
-}
-
 static inline u32 get_pg_table_idx(virt_addr_t vaddr) {
     return (vaddr >> 12) & 0x3FF;
 }
 
 static inline pg_table_entry_t* get_pg_table_entry(u32 pg_dir_idx, u32 pg_table_idx) {
-    pg_table_t* pg_table = get_pg_table(pg_dir_idx);
+    pg_table_t* pg_table = (pg_table_t*)_get_pg_table(pg_dir_idx);
     return &pg_table->entries[pg_table_idx];
 }
 
@@ -93,16 +88,16 @@ static inline void flush_tlb_mapping(virt_addr_t vaddr) {
     __asm__ volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
 }
 
-void __hot vmm_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
+void vmm_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
     u32 pg_dir_idx = get_pg_dir_idx(vaddr);
     pg_dir_entry_t* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
-    if (unlikely(!pg_dir_entry->present)) {
+    if (!pg_dir_entry->present) {
         phys_addr_t paddr = pmm_alloc_frm();
         if (unlikely(!paddr))
             PANIC("Error: Failed to allocate frame");
 
         set_pg_dir_entry(pg_dir_entry, paddr, flags);
-        memset(get_pg_table(pg_dir_idx), 0, sizeof(pg_table_t));
+        memset((pg_table_t*)_get_pg_table(pg_dir_idx), 0, sizeof(pg_table_t));
     }
 
     u32 pg_table_idx = get_pg_table_idx(vaddr);
@@ -111,7 +106,7 @@ void __hot vmm_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
     flush_tlb_mapping(vaddr);
 }
 
-void __hot vmm_unmap_pg(virt_addr_t vaddr) {
+void vmm_unmap_pg(virt_addr_t vaddr) {
     u32 pg_dir_idx = get_pg_dir_idx(vaddr);
     pg_dir_entry_t* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
     if (unlikely(!pg_dir_entry->present))
@@ -123,7 +118,7 @@ void __hot vmm_unmap_pg(virt_addr_t vaddr) {
     flush_tlb_mapping(vaddr);
 }
 
-void __hot vmm_demand_map(virt_addr_t vaddr) {
+void vmm_demand_map(virt_addr_t vaddr) {
     phys_addr_t paddr = pmm_alloc_frm();
     if (unlikely(!paddr))
         PANIC("Error: Failed to allocate frame");
@@ -133,5 +128,5 @@ void __hot vmm_demand_map(virt_addr_t vaddr) {
 
 void __init vmm_init(void) {
     pg_dir_entry_t* pg_dir_entry = get_pg_dir_entry(_PG_DIR_SELF_ENTRY);
-    set_pg_dir_entry(pg_dir_entry, __pa(&kernel_pg_dir), _PG_RW_FLAG);
+    set_pg_dir_entry(pg_dir_entry, __pa(&_kernel_pg_dir), _PG_RW_FLAG);
 }

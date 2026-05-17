@@ -1,15 +1,15 @@
 #include <stdbool.h>
 
 #include "kheap.h"
+#include "../lib/list.h"
 
 #define _MIN_BLK_SZ    (sizeof(kheap_blk_hdr_t) + sizeof(kheap_blk_ftr_t) + 16)
 #define _ALIGN_UP_8(x) ((x + 7) & ~7)
 
 typedef struct kheap_blk_hdr_t {
-    size_t                  sz;
-    bool                    free;
-    struct kheap_blk_hdr_t* nxt;
-    struct kheap_blk_hdr_t* prv;
+    size_t      sz;
+    bool        free;
+    list_node_t link;
 } kheap_blk_hdr_t;
 
 typedef struct kheap_blk_ftr_t {
@@ -17,19 +17,18 @@ typedef struct kheap_blk_ftr_t {
     kheap_blk_hdr_t* hdr;
 } kheap_blk_ftr_t;
 
-static kheap_blk_hdr_t* free_list;
-extern u8               skheap[];
-extern u8               ekheap[];
+static list_node_t free_list;
+
+extern u8 skheap[];
+extern u8 ekheap[];
 
 static inline kheap_blk_hdr_t* get_hdr(kheap_blk_ftr_t* ftr) {
     return ftr->hdr;
 }
 
-static inline void set_hdr(kheap_blk_hdr_t* hdr, size_t sz, bool free, kheap_blk_hdr_t* nxt, kheap_blk_hdr_t* prv) {
+static inline void set_hdr(kheap_blk_hdr_t* hdr, size_t sz, bool free) {
     hdr->sz   = sz;
     hdr->free = free;
-    hdr->nxt  = nxt;
-    hdr->prv  = prv;
 }
 
 static inline kheap_blk_ftr_t* get_ftr(kheap_blk_hdr_t* hdr) {
@@ -43,7 +42,8 @@ static inline void set_ftr(kheap_blk_hdr_t* hdr) {
 }
 
 static inline void blk_init(kheap_blk_hdr_t* hdr, size_t sz, bool free) {
-    set_hdr(hdr, sz, free, NULL, NULL);
+    set_hdr(hdr, sz, free);
+    list_init(&hdr->link);
     set_ftr(hdr);
 }
 
@@ -65,25 +65,11 @@ static inline bool has_prv(kheap_blk_hdr_t* hdr) {
 }
 
 static void add_to_free_list(kheap_blk_hdr_t* hdr) {
-    hdr->nxt = free_list;
-    hdr->prv = NULL;
-    if (free_list)
-        free_list->prv = hdr;
-
-    free_list = hdr;
+    list_add_to_head(&hdr->link, &free_list);
 }
 
 static void remove_from_free_list(kheap_blk_hdr_t* hdr) {
-    if (hdr->prv)
-        hdr->prv->nxt = hdr->nxt;
-    else
-        free_list = hdr->nxt;
-
-    if (hdr->nxt)
-        hdr->nxt->prv = hdr->prv;
-
-    hdr->nxt = NULL;
-    hdr->prv = NULL;
+    list_del(&hdr->link);
 }
 
 static void merge_with_nxt(kheap_blk_hdr_t* hdr) {
@@ -140,9 +126,10 @@ static void split_blk(kheap_blk_hdr_t* hdr, size_t sz) {
     add_to_free_list(new);
 }
 
-void* __hot kmalloc(size_t sz) {
+void* kmalloc(size_t sz) {
     size_t req = get_req_blk_sz(sz);
-    for (kheap_blk_hdr_t* cur = free_list; cur; cur = cur->nxt) {
+    kheap_blk_hdr_t* cur;
+    list_for_each_entry(cur, &free_list, link) {
         if (cur->free && cur->sz >= req) {
             remove_from_free_list(cur);
             split_blk(cur, req);
@@ -154,7 +141,7 @@ void* __hot kmalloc(size_t sz) {
     return NULL;
 }
 
-void __hot kfree(void* ptr) {
+void kfree(void* ptr) {
     kheap_blk_hdr_t* hdr = (kheap_blk_hdr_t*)((u8*)ptr - sizeof(kheap_blk_hdr_t));
     hdr->free            = true;
     hdr                  = coalesce(hdr);
@@ -164,6 +151,7 @@ void __hot kfree(void* ptr) {
 void __init kheap_init(void) {
     size_t kheap_sz = ekheap - skheap;
     kheap_blk_hdr_t* hdr = (kheap_blk_hdr_t*)skheap;
+    list_init(&free_list);
     blk_init(hdr, kheap_sz, true);
-    free_list = hdr;
+    add_to_free_list(hdr);
 }

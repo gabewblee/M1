@@ -4,7 +4,7 @@
 
 /**
  * setup_swapper_pg_dir - Initializes swapper page directory. Sets up
- *                        identity mapping and higher-half mapping. Temporary 
+ *                        identity mapping and higher-half mapping. Initial 
  *                        page tables are physically placed right after the
  *                        kernel image.
  */

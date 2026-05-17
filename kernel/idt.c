@@ -1,7 +1,7 @@
 #include "idt.h"
 #include "panic.h"
 #include "pic.h"
-#include "task.h"
+#include "sched.h"
 
 #include "../drivers/vga.h"
 #include "../io/io.h"
@@ -53,7 +53,7 @@ static void dummy_handler(void) {
     ;
 }
 
-void __cold exception_handler(interrupt_frm_t* frm) {
+void exception_handler(interrupt_frm_t* frm) {
     if (likely(frm->int_no == 14 && !(frm->err_code & 1))) {
         virt_addr_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
@@ -65,7 +65,7 @@ void __cold exception_handler(interrupt_frm_t* frm) {
     PANIC("Error: CPU exception thrown");
 }
 
-void __hot irq_handler(interrupt_frm_t* frm) {
+void irq_handler(interrupt_frm_t* frm) {
     u8 irq = frm->int_no - _NUM_EXCEPS;
     if (unlikely(irq >= _NUM_IRQS))
         PANIC("Error: Invalid IRQ received");
@@ -75,12 +75,12 @@ void __hot irq_handler(interrupt_frm_t* frm) {
 }
 
 static void set_idt_desc(u8 vector, virt_addr_t isr, u8 flags) {
-    idt_entry_t* descriptor = &idt[vector];
-    descriptor->isr_low     = isr & 0xFFFF;
-    descriptor->segment     = gdt_kernel_code_seg_desc - gdt_start;
-    descriptor->reserved    = 0;
-    descriptor->attributes  = flags;
-    descriptor->isr_high    = isr >> 16;
+    idt_entry_t* desc = &idt[vector];
+    desc->isr_low     = isr & 0xFFFF;
+    desc->segment     = gdt_kernel_code_seg_desc - gdt_start;
+    desc->reserved    = 0;
+    desc->attributes  = flags;
+    desc->isr_high    = isr >> 16;
 }
 
 void __init idt_init(void) {

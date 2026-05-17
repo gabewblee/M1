@@ -9,13 +9,13 @@
  * @sz: The size of the memory block to allocate.
  * @return: The pointer to the allocated memory block, or NULL on failure.
  */
- void* __hot kmalloc(size_t sz);
+ void* kmalloc(size_t sz);
 
 /**
  * kfree - Frees the memory block found at @ptr.
  * @ptr: The pointer to the memory block to free.
  */
-void __hot kfree(void* ptr);
+void kfree(void* ptr);
 
 /**
  * kheap_init - Initializes the kernel heap.

@@ -25,4 +25,4 @@ typedef enum syscall_err_t {
  * syscall_handler - System call handler.
  * @frm: The pointer to the system call stack frame.
  */
-void __hot syscall_handler(syscall_frm_t* frm);
+void syscall_handler(syscall_frm_t* frm);

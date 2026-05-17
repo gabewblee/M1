@@ -7,12 +7,12 @@
 #include "../drivers/vga.h"
 #include "../lib/string.h"
 
-#define _word_shl(x)       ((x) << 5)
-#define _word_shr(x)       ((x) >> 5)
-#define _ALIGN_UP_FRM(x)   (((x) + PG_SZ - 1) & ~(PG_SZ - 1))
-#define _ALIGN_DOWN_FRM(x) ((x) & ~(PG_SZ - 1))
 #define _MAX_NUM_FRMS      (1u << 20)
 #define _NUM_WORDS         ((_MAX_NUM_FRMS >> 3) / sizeof(u32))
+#define _align_up_frm(x)   (((x) + PG_SZ - 1) & ~(PG_SZ - 1))
+#define _align_down_frm(x) ((x) & ~(PG_SZ - 1))
+#define _word_shl(x)       ((x) << 5)
+#define _word_shr(x)       ((x) >> 5)
 
 static u32 bitmap[_NUM_WORDS];
 static u32 last;
@@ -21,11 +21,9 @@ extern u8  skernel[];
 extern u8  ekernel[];
 extern u8  sinit[];
 extern u8  einit[];
-extern u8  skheap[];
-extern u8  ekheap[];
 extern u32 swapper_pg_table_cnt;
 
-static __always_inline void bitmap_mark_bit(u32 bit) {
+static __always_inline void __hot bitmap_mark_bit(u32 bit) {
     u32 word = _word_shr(bit), mask = one_shl(bit & 31);
     if (unlikely(bitmap[word] & mask))
         return;
@@ -33,7 +31,7 @@ static __always_inline void bitmap_mark_bit(u32 bit) {
     bitmap[word] |= mask;
 }
 
-static __always_inline void bitmap_unmark_bit(u32 bit) {
+static __always_inline void __hot bitmap_unmark_bit(u32 bit) {
     u32 word = _word_shr(bit), mask = one_shl(bit & 31);
     if (unlikely(!(bitmap[word] & mask)))
         return;
@@ -42,13 +40,13 @@ static __always_inline void bitmap_unmark_bit(u32 bit) {
 }
 
 static void bitmap_mark_range(phys_addr_t base, u32 len) {
-    phys_addr_t start = _ALIGN_DOWN_FRM(base), end = _ALIGN_UP_FRM(base + len);
+    phys_addr_t start = _align_down_frm(base), end = _align_up_frm(base + len);
     for (phys_addr_t paddr = start; paddr < end; paddr += PG_SZ)
         bitmap_mark_bit(pg_shr(paddr));
 }
 
 static void bitmap_unmark_range(phys_addr_t base, u32 len) {
-    phys_addr_t start = _ALIGN_UP_FRM(base), end = _ALIGN_DOWN_FRM(base + len);
+    phys_addr_t start = _align_up_frm(base), end = _align_down_frm(base + len);
     for (phys_addr_t paddr = start; paddr < end; paddr += PG_SZ)
         bitmap_unmark_bit(pg_shr(paddr));
 }
@@ -115,7 +113,7 @@ void pmm_free_init_section(void) {
     bitmap_unmark_range(__pa(sinit), (u32)(einit - sinit));
 }
 
-phys_addr_t __hot pmm_alloc_frm(void) {
+phys_addr_t pmm_alloc_frm(void) {
     u32 bit = find_unmarked_bit(last, _MAX_NUM_FRMS);
     if (unlikely(bit >= _MAX_NUM_FRMS && (bit = find_unmarked_bit(0, last)) >= _MAX_NUM_FRMS))
         return 0;
@@ -125,11 +123,11 @@ phys_addr_t __hot pmm_alloc_frm(void) {
     return pg_shl(bit);
 }
 
-void __hot pmm_free_frm(phys_addr_t paddr) {
+void pmm_free_frm(phys_addr_t paddr) {
     bitmap_unmark_bit(pg_shr(paddr));
 }
 
-phys_addr_t __hot pmm_alloc_frms(u32 cnt) {
+phys_addr_t pmm_alloc_frms(u32 cnt) {
     if (cnt == 1)
         return pmm_alloc_frm();
 
@@ -144,7 +142,7 @@ phys_addr_t __hot pmm_alloc_frms(u32 cnt) {
     return pg_shl(first);
 }
 
-void __hot pmm_free_frms(phys_addr_t paddr, u32 cnt) {
+void pmm_free_frms(phys_addr_t paddr, u32 cnt) {
     u32 first = pg_shr(paddr);
     for (u32 i = 0; i < cnt; i++)
         bitmap_unmark_bit(first + i);

@@ -5,10 +5,11 @@ MEMINFO  equ 1 << 1
 MBFLAGS  equ MBALIGN | MEMINFO
 CHECKSUM equ -(MAGIC + MBFLAGS)
 
-%define HIGHER_HALF_OFFSET   0xC0000000
 %define PG_SZ                4096
+%define HIGHER_HALF_OFFSET   0xC0000000
 %define _KERNEL_CODE_SEG_SEL gdt_kernel_code_seg_desc - gdt_start
 %define _KERNEL_DATA_SEG_SEL gdt_kernel_data_seg_desc - gdt_start
+%define _TASK_STATE_SEG_SEL  gdt_task_state_seg_desc - gdt_start
 %define __pa(x)              ((x) - HIGHER_HALF_OFFSET)
 
 extern swapper_pg_dir
@@ -28,7 +29,7 @@ _start:
     mov dword [__pa(mbi)], ebx
 
     ; Set up stack
-    mov esp, __pa(kernel_stack_top)
+    mov esp, __pa(kstack_top)
 
     ; Initialize swapper kernel page directory
     call setup_swapper_pg_dir
@@ -63,7 +64,7 @@ higher_half_kernel:
     mov cr3, eax
 
     ; Set up stack
-    mov esp, kernel_stack_top
+    mov esp, kstack_top
 
     ; GDT setup
     lgdt [gdt_desc]
@@ -77,6 +78,24 @@ higher_half_kernel:
     mov fs, ax
     mov gs, ax
     mov ss, ax
+
+    ; Set up TSS
+    mov dword [task_state_seg + 4], kstack_top
+    mov word [task_state_seg + 8], _KERNEL_DATA_SEG_SEL
+
+    ; Set up TSS descriptor
+    mov word [gdt_task_state_seg_desc + 0], task_state_seg_end - task_state_seg_start - 1
+    mov eax, task_state_seg
+    mov word [gdt_task_state_seg_desc + 2], ax
+    shr eax, 16
+    mov byte [gdt_task_state_seg_desc + 4], al
+    mov byte [gdt_task_state_seg_desc + 5], 0x89
+    mov byte [gdt_task_state_seg_desc + 6], 0x00
+    mov byte [gdt_task_state_seg_desc + 7], ah
+
+    ; Load TSS
+    mov ax, _TASK_STATE_SEG_SEL
+    ltr ax
     
     ; Enter C code
     extern kmain
@@ -96,21 +115,17 @@ global mbi
 mbi:
     dd 0
 
-; Global Descriptor Table descriptor (GDT descriptor)
 gdt_desc:
     dw gdt_end - gdt_start - 1
     dd gdt_start
 
 align 4
-; Global Descriptor Table start (GDT start)
 global gdt_start
 gdt_start:
 
-; Null descriptor
 gdt_null_desc:
     dq 0x0000000000000000
 
-; Kernel Code Segment descriptor (KCS descriptor)
 global gdt_kernel_code_seg_desc
 gdt_kernel_code_seg_desc:
     dw 0xFFFF
@@ -120,7 +135,6 @@ gdt_kernel_code_seg_desc:
     db 0xCF
     db 0x00
 
-; Kernel Data Segment descriptor (KDS descriptor)
 global gdt_kernel_data_seg_desc
 gdt_kernel_data_seg_desc:
     dw 0xFFFF
@@ -130,7 +144,6 @@ gdt_kernel_data_seg_desc:
     db 0xCF
     db 0x00
 
-; User Code Segment descriptor (UCS descriptor)
 gdt_user_code_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -139,7 +152,6 @@ gdt_user_code_seg_desc:
     db 0xCF
     db 0x00
 
-; User Data Segment descriptor (UDS descriptor)
 gdt_user_data_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -148,7 +160,6 @@ gdt_user_data_seg_desc:
     db 0xCF
     db 0x00
 
-; Task State Segment descriptor (TSS descriptor)
 global gdt_task_state_seg_desc
 gdt_task_state_seg_desc:
     dq 0x0000000000000000
@@ -156,8 +167,17 @@ gdt_task_state_seg_desc:
 gdt_end:
 
 section .bss
-align 16
-kernel_stack_bottom:
+alignb 4
+task_state_seg_start:
+
+global task_state_seg
+task_state_seg:
+    resb 108
+
+task_state_seg_end:
+
+alignb 16
+kstack_bottom:
     resb 8192
-global kernel_stack_top
-kernel_stack_top:
+global kstack_top
+kstack_top:
