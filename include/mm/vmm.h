@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../boot/multiboot.h"
-#include "../config.h"
+#include "boot/multiboot.h"
+#include "config.h"
 
 /**
  * vmm_map_pg - Maps @vaddr to @paddr with the given flags.

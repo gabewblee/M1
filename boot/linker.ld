@@ -1,6 +1,6 @@
 ENTRY(_start)
 
-HIGHER_HALF_OFFSET = 0xC0000000;
+KERNEL_BASE = 0xC0000000;
 
 SECTIONS
 {
@@ -11,39 +11,39 @@ SECTIONS
 		*(.multiboot)
 	}
 
-	. += HIGHER_HALF_OFFSET;
+	. += KERNEL_BASE;
 	. = ALIGN(4K);
 	skernel = .;
 
-	.init BLOCK(4K) : AT(ADDR(.init) - HIGHER_HALF_OFFSET)
+	.init BLOCK(4K) : AT(ADDR(.init) - KERNEL_BASE)
 	{
 		sinit = .;
 		*(.init)
 		einit = .;
 	}
 
-	.text BLOCK(4K) : AT(ADDR(.text) - HIGHER_HALF_OFFSET)
+	.text BLOCK(4K) : AT(ADDR(.text) - KERNEL_BASE)
 	{
 		stext = .;
 		*(.text)
 		etext = .;
 	}
 
-	.rodata BLOCK(4K) : AT(ADDR(.rodata) - HIGHER_HALF_OFFSET)
+	.rodata BLOCK(4K) : AT(ADDR(.rodata) - KERNEL_BASE)
 	{
 		srodata = .;
 		*(.rodata)
 		erodata = .;
 	}
 
-	.data BLOCK(4K) : AT(ADDR(.data) - HIGHER_HALF_OFFSET)
+	.data BLOCK(4K) : AT(ADDR(.data) - KERNEL_BASE)
 	{
 		sdata = .;
 		*(.data)
 		edata = .;
 	}
 
-	.bss BLOCK(4K) : AT(ADDR(.bss) - HIGHER_HALF_OFFSET)
+	.bss BLOCK(4K) : AT(ADDR(.bss) - KERNEL_BASE)
 	{
 		sbss = .;
 		*(COMMON)

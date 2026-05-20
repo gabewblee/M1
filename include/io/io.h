@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "../config.h"
+#include "config.h"
 
 /**
  * inb - Reads a byte from an I/O port.

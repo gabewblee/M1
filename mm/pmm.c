@@ -1,20 +1,16 @@
 #include <stdint.h>
 
-#include "pmm.h"
+#include "bits.h"
+#include "boot/setup.h"
+#include "config.h"
+#include "dev/vga.h"
+#include "lib/string.h"
+#include "mm/page.h"
+#include "mm/pmm.h"
 
-#include "../boot/setup.h"
-#include "../config.h"
-#include "../drivers/vga.h"
-#include "../lib/string.h"
+#define MAP_WORD_CNT (FRM_MAX_CNT >> 5) /* Bitmap word count */
 
-#define _MAX_NUM_FRMS      (1u << 20)
-#define _NUM_WORDS         ((_MAX_NUM_FRMS >> 3) / sizeof(u32))
-#define _align_up_frm(x)   (((x) + PG_SZ - 1) & ~(PG_SZ - 1))
-#define _align_down_frm(x) ((x) & ~(PG_SZ - 1))
-#define _word_shl(x)       ((x) << 5)
-#define _word_shr(x)       ((x) >> 5)
-
-static u32 bitmap[_NUM_WORDS];
+static u32 bitmap[MAP_WORD_CNT];
 static u32 last;
 
 extern u8  skernel[];
@@ -24,7 +20,7 @@ extern u8  einit[];
 extern u32 swapper_pg_table_cnt;
 
 static __always_inline void __hot bitmap_mark_bit(u32 bit) {
-    u32 word = _word_shr(bit), mask = one_shl(bit & 31);
+    u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
     if (unlikely(bitmap[word] & mask))
         return;
 
@@ -32,7 +28,7 @@ static __always_inline void __hot bitmap_mark_bit(u32 bit) {
 }
 
 static __always_inline void __hot bitmap_unmark_bit(u32 bit) {
-    u32 word = _word_shr(bit), mask = one_shl(bit & 31);
+    u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
     if (unlikely(!(bitmap[word] & mask)))
         return;
     
@@ -40,45 +36,45 @@ static __always_inline void __hot bitmap_unmark_bit(u32 bit) {
 }
 
 static void bitmap_mark_range(phys_addr_t base, u32 len) {
-    phys_addr_t start = _align_down_frm(base), end = _align_up_frm(base + len);
+    phys_addr_t start = ALIGN_DOWN_TO(base, PG_SZ), end = ALIGN_UP_TO(base + len, PG_SZ);
     for (phys_addr_t paddr = start; paddr < end; paddr += PG_SZ)
-        bitmap_mark_bit(pg_shr(paddr));
+        bitmap_mark_bit(PHYS_TO_PFN(paddr));
 }
 
 static void bitmap_unmark_range(phys_addr_t base, u32 len) {
-    phys_addr_t start = _align_up_frm(base), end = _align_down_frm(base + len);
+    phys_addr_t start = ALIGN_UP_TO(base, PG_SZ), end = ALIGN_DOWN_TO(base + len, PG_SZ);
     for (phys_addr_t paddr = start; paddr < end; paddr += PG_SZ)
-        bitmap_unmark_bit(pg_shr(paddr));
+        bitmap_unmark_bit(PHYS_TO_PFN(paddr));
 }
 
 static u32 find_unmarked_bit(u32 start, u32 end) {
-    u32 first = _word_shr(start), last = _word_shr(end + 31);
+    u32 first = BIT_TO_WORD(start), last = BIT_TO_WORD(end + 31);
     for (u32 word = first; word < last; word++) {
         u32 mask = ~bitmap[word];
         if (word == first) {
             u32 bit = start & 31;
             if (bit)
-                mask &= ~(one_shl(bit) - 1);
+                mask &= ~(BIT(bit) - 1);
         }
 
         if ((word + 1) == last) {
             u32 bit = end & 31;
             if (bit)
-                mask &= (one_shl(bit) - 1);
+                mask &= (BIT(bit) - 1);
         }
 
         if (!mask)
             continue;
 
-        return (_word_shl(word)) + (u32)__builtin_ctz(mask);
+        return WORD_TO_BIT(word) + (u32)__builtin_ctz(mask);
     }
-    return _MAX_NUM_FRMS;
+    return FRM_MAX_CNT;
 }
 
 static u32 find_unmarked_run(u32 hint, u32 cnt) {
     u32 i = hint, run = 0, run_start = 0, wrapped = 0;
     for (;;) {
-        if (unlikely(i >= _MAX_NUM_FRMS)) {
+        if (unlikely(i >= FRM_MAX_CNT)) {
             if (unlikely(wrapped)) break;
             wrapped = 1;
             i = 0;
@@ -87,14 +83,14 @@ static u32 find_unmarked_run(u32 hint, u32 cnt) {
         }
         if (unlikely(wrapped && i >= hint)) break;
 
-        u32 word = bitmap[_word_shr(i)];
+        u32 word = bitmap[BIT_TO_WORD(i)];
         if (unlikely(word == 0xFFFFFFFFu)) {
             run = 0;
-            i = (i + 32) & ~31u;
+            i = ALIGN_DOWN_TO(i + 32, 32);
             continue;
         }
 
-        if (!(word & one_shl(i & 31))) {
+        if (!(word & BIT(i & 31))) {
             if (run == 0)
                 run_start = i;
 
@@ -106,7 +102,7 @@ static u32 find_unmarked_run(u32 hint, u32 cnt) {
         }
         i++;
     }
-    return _MAX_NUM_FRMS;
+    return FRM_MAX_CNT;
 }
 
 void pmm_free_init_section(void) {
@@ -114,17 +110,17 @@ void pmm_free_init_section(void) {
 }
 
 phys_addr_t pmm_alloc_frm(void) {
-    u32 bit = find_unmarked_bit(last, _MAX_NUM_FRMS);
-    if (unlikely(bit >= _MAX_NUM_FRMS && (bit = find_unmarked_bit(0, last)) >= _MAX_NUM_FRMS))
+    u32 bit = find_unmarked_bit(last, FRM_MAX_CNT);
+    if (unlikely(bit >= FRM_MAX_CNT && (bit = find_unmarked_bit(0, last)) >= FRM_MAX_CNT))
         return 0;
 
     bitmap_mark_bit(bit);
-    last = (bit + 1) & (_MAX_NUM_FRMS - 1);
-    return pg_shl(bit);
+    last = (bit + 1) & (FRM_MAX_CNT - 1);
+    return PFN_TO_PHYS(bit);
 }
 
 void pmm_free_frm(phys_addr_t paddr) {
-    bitmap_unmark_bit(pg_shr(paddr));
+    bitmap_unmark_bit(PHYS_TO_PFN(paddr));
 }
 
 phys_addr_t pmm_alloc_frms(u32 cnt) {
@@ -132,18 +128,18 @@ phys_addr_t pmm_alloc_frms(u32 cnt) {
         return pmm_alloc_frm();
 
     u32 first = find_unmarked_run(last, cnt);
-    if (unlikely(first >= _MAX_NUM_FRMS))
+    if (unlikely(first >= FRM_MAX_CNT))
         return 0;
 
     for (u32 i = 0; i < cnt; i++)
         bitmap_mark_bit(first + i);
 
-    last = (first + cnt) & (_MAX_NUM_FRMS - 1);
-    return pg_shl(first);
+    last = (first + cnt) & (FRM_MAX_CNT - 1);
+    return PFN_TO_PHYS(first);
 }
 
 void pmm_free_frms(phys_addr_t paddr, u32 cnt) {
-    u32 first = pg_shr(paddr);
+    u32 first = PHYS_TO_PFN(paddr);
     for (u32 i = 0; i < cnt; i++)
         bitmap_unmark_bit(first + i);
 }

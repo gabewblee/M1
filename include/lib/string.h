@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 
-#include "../config.h"
+#include "config.h"
 
 /**
  * memset - Fills a memory area with a constant byte.

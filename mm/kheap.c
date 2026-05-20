@@ -1,20 +1,20 @@
 #include <stdbool.h>
 
-#include "kheap.h"
-#include "../lib/list.h"
+#include "bits.h"
+#include "lib/list.h"
+#include "mm/kheap.h"
 
-#define _MIN_BLK_SZ    (sizeof(kheap_blk_hdr_t) + sizeof(kheap_blk_ftr_t) + 16)
-#define _ALIGN_UP_8(x) ((x + 7) & ~7)
+#define MIN_BLK_SZ (sizeof(kheap_blk_hdr_t) + sizeof(kheap_blk_ftr_t) + 16) /* Minimum block size */
 
 typedef struct kheap_blk_hdr_t {
-    size_t      sz;
-    bool        free;
-    list_node_t link;
+    size_t      sz;   /* Block size         */
+    bool        free; /* Block availability */
+    list_node_t link; /* Free list node     */ 
 } kheap_blk_hdr_t;
 
 typedef struct kheap_blk_ftr_t {
-    size_t           sz;
-    kheap_blk_hdr_t* hdr;
+    size_t           sz;  /* Block size           */
+    kheap_blk_hdr_t* hdr; /* Block header pointer */
 } kheap_blk_ftr_t;
 
 static list_node_t free_list;
@@ -64,15 +64,15 @@ static inline bool has_prv(kheap_blk_hdr_t* hdr) {
     return (u8*)hdr > skheap;
 }
 
-static void add_to_free_list(kheap_blk_hdr_t* hdr) {
+static inline void add_to_free_list(kheap_blk_hdr_t* hdr) {
     list_add_to_head(&hdr->link, &free_list);
 }
 
-static void remove_from_free_list(kheap_blk_hdr_t* hdr) {
+static inline void remove_from_free_list(kheap_blk_hdr_t* hdr) {
     list_del(&hdr->link);
 }
 
-static void merge_with_nxt(kheap_blk_hdr_t* hdr) {
+static inline void merge_with_nxt(kheap_blk_hdr_t* hdr) {
     kheap_blk_hdr_t* nxt = get_nxt(hdr);
     remove_from_free_list(nxt);
 
@@ -80,7 +80,7 @@ static void merge_with_nxt(kheap_blk_hdr_t* hdr) {
     set_ftr(hdr);
 }
 
-static kheap_blk_hdr_t* merge_with_prv(kheap_blk_hdr_t* hdr) {
+static inline kheap_blk_hdr_t* merge_with_prv(kheap_blk_hdr_t* hdr) {
     kheap_blk_hdr_t* prv = get_prv(hdr);
     remove_from_free_list(prv);
 
@@ -89,15 +89,15 @@ static kheap_blk_hdr_t* merge_with_prv(kheap_blk_hdr_t* hdr) {
     return prv;
 }
 
-static size_t get_req_blk_sz(size_t sz) {
-    size_t req = _ALIGN_UP_8(sz) + sizeof(kheap_blk_hdr_t) + sizeof(kheap_blk_ftr_t);
-    if (req < _MIN_BLK_SZ)
-        req = _MIN_BLK_SZ;
+static inline size_t get_req_blk_sz(size_t sz) {
+    size_t req = ALIGN_UP_TO(sz, 8) + sizeof(kheap_blk_hdr_t) + sizeof(kheap_blk_ftr_t);
+    if (req < MIN_BLK_SZ)
+        req = MIN_BLK_SZ;
 
     return req;
 }
 
-static kheap_blk_hdr_t* coalesce(kheap_blk_hdr_t* hdr) {
+static inline kheap_blk_hdr_t* coalesce(kheap_blk_hdr_t* hdr) {
     if (has_nxt(hdr)) {
         kheap_blk_hdr_t* nxt = get_nxt(hdr);
         if (nxt->free)
@@ -113,9 +113,9 @@ static kheap_blk_hdr_t* coalesce(kheap_blk_hdr_t* hdr) {
     return hdr;
 }
 
-static void split_blk(kheap_blk_hdr_t* hdr, size_t sz) {
+static inline void split_blk(kheap_blk_hdr_t* hdr, size_t sz) {
     size_t remaining = hdr->sz - sz;
-    if (remaining < _MIN_BLK_SZ)
+    if (remaining < MIN_BLK_SZ)
         return;
 
     hdr->sz = sz;

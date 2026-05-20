@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../config.h"
+#include "config.h"
 
 #define PANIC(msg) panic(msg, __FILE__, __LINE__)
 
 /**
- * panic - Halts the kernel and prints a panic message.
+ * panic - Prints a panic message, disables interrupts, and halts forever.
  * @msg: The panic message to print.
  * @file: The file where the panic occurred.
  * @line: The line where the panic occurred.

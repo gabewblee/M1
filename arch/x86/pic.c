@@ -1,6 +1,5 @@
-#include "pic.h"
-
-#include "../io/io.h"
+#include "arch/x86/pic.h"
+#include "io/io.h"
 
 static u16 _get_irq_reg(int ocw3) {
     outb(PIC1_COMMAND, ocw3);

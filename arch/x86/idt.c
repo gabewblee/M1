@@ -1,27 +1,22 @@
-#include "idt.h"
-#include "panic.h"
-#include "pic.h"
-#include "sched.h"
-
-#include "../drivers/vga.h"
-#include "../io/io.h"
-#include "../mm/vmm.h"
-
-#define _NUM_EXCEPS 32
-#define _NUM_IRQS   16
-#define _NUM_DESC   256
+#include "arch/x86/idt.h"
+#include "arch/x86/pic.h"
+#include "dev/vga.h"
+#include "io/io.h"
+#include "kernel/panic.h"
+#include "kernel/sched.h"
+#include "mm/vmm.h"
 
 typedef struct idt_entry_t {
-    u16 isr_low;
-    u16 segment;
-    u8  reserved;
-    u8  attributes;
-    u16 isr_high;
+    u16 isr_low;    /* Bits 0-15 of interrupt handler address       */
+    u16 segment;    /* Code segment selector                        */
+    u8  reserved;   /* Reserved field                               */
+    u8  attributes; /* Gate type, privilege level, and present flag */
+    u16 isr_high;   /* Bits 16-31 of interrupt handler address      */
 } __packed idt_entry_t;
 
 typedef struct idtr_t {
-    u16 limit;
-    u32 base;
+    u16 limit; /* IDT size - 1     */
+    u32 base;  /* IDT base address */
 } __packed idtr_t;
 
 typedef void (*irq_handler_func_t)(void);
@@ -30,11 +25,11 @@ static void pit_handler(void);
 static void dummy_handler(void);
 
 __aligned(0x10)
-static idt_entry_t        idt[_NUM_DESC];
+static idt_entry_t        idt[IDT_DESC_CNT];
 static idtr_t             idtr;
-static irq_handler_func_t irq_handlers[_NUM_IRQS] = {
+static irq_handler_func_t irq_handlers[IDT_IRQ_CNT] = {
     [0]                    = pit_handler,
-    [1 ... (_NUM_IRQS - 1)] = dummy_handler
+    [1 ... (IDT_IRQ_CNT - 1)] = dummy_handler
 };
 
 extern u32 isr_stub_table[];
@@ -66,8 +61,8 @@ void exception_handler(interrupt_frm_t* frm) {
 }
 
 void irq_handler(interrupt_frm_t* frm) {
-    u8 irq = frm->int_no - _NUM_EXCEPS;
-    if (unlikely(irq >= _NUM_IRQS))
+    u8 irq = frm->int_no - IDT_EXCEPTION_CNT;
+    if (unlikely(irq >= IDT_IRQ_CNT))
         PANIC("Error: Invalid IRQ received");
 
     pic_send_eoi(irq);
@@ -85,12 +80,12 @@ static void set_idt_desc(u8 vector, virt_addr_t isr, u8 flags) {
 
 void __init idt_init(void) {
     idtr.base  = (virt_addr_t)&idt[0];
-    idtr.limit = (u16)(sizeof(idt_entry_t) * _NUM_DESC - 1);
-    for (u8 vector = 0; vector < _NUM_EXCEPS; vector++)
+    idtr.limit = (u16)(sizeof(idt_entry_t) * IDT_DESC_CNT - 1);
+    for (u8 vector = 0; vector < IDT_EXCEPTION_CNT; vector++)
         set_idt_desc(vector, isr_stub_table[vector], 0x8E);
 
-    for (u8 vector = 0; vector < _NUM_IRQS; vector++)
-        set_idt_desc(vector + _NUM_EXCEPS, irq_stub_table[vector], 0x8E);
+    for (u8 vector = 0; vector < IDT_IRQ_CNT; vector++)
+        set_idt_desc(vector + IDT_EXCEPTION_CNT, irq_stub_table[vector], 0x8E);
 
     set_idt_desc(0x80, (virt_addr_t)syscall_stub, 0xEE);
     __asm__ volatile ("lidt %0" : : "m"(idtr));

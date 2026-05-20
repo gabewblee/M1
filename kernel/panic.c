@@ -1,17 +1,16 @@
-#include "idt.h"
-#include "panic.h"
-
-#include "../config.h"
-#include "../drivers/vga.h" 
+#include "arch/x86/idt.h"
+#include "config.h"
+#include "dev/vga.h"
+#include "kernel/panic.h"
 
 void __noreturn panic(const char *msg, const char *file, u32 line) {
-    vga_clear_screen(VGA_BLACK_COLOR);
-    vga_print_string("Kernel panic:", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
-    vga_print_string(msg, VGA_WHITE_COLOR, VGA_BLACK_COLOR);
-    vga_print_string("\nFile: ", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
-    vga_print_string(file, VGA_WHITE_COLOR, VGA_BLACK_COLOR);
-    vga_print_string("\nLine: ", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
-    vga_print_decimal(line, VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    vga_clear_screen(VGA_COLOR_BLACK);
+    vga_print_string("Kernel panic:", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_print_string(msg, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_print_string("\nFile: ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_print_string(file, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_print_string("\nLine: ", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    vga_print_decimal(line, VGA_COLOR_WHITE, VGA_COLOR_BLACK);
 
     __asm__ volatile ("cli");
     for (;;)

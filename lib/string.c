@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "string.h"
+#include "lib/string.h"
 
 void* memset(void* str, int c, size_t n) {
     unsigned char* ptr = (unsigned char*)str;

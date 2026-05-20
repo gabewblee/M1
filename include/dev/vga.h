@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "../io/io.h"
+#include "io/io.h"
 
 /**
  * vga_enable_cursor - Enables the hardware text cursor.
