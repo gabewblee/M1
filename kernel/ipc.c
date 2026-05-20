@@ -41,7 +41,7 @@ static i32 port_send(port_t* port, const ipc_msg_t* msg, u32 sender) {
         return E_OK;
     }
 
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     cur->tx_msg = msg;
     sched_block(&port->senders, THREAD_STATE_BLOCKED);
     cur->tx_msg = NULL;
@@ -94,7 +94,7 @@ static i32 port_recv(port_t* port, ipc_msg_t* out) {
         return E_OK;
     }
 
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     cur->rx_msg = out;
     sched_block(&port->receivers, THREAD_STATE_BLOCKED);
     cur->rx_msg = NULL;
@@ -134,11 +134,11 @@ i32 ipc_send(u32 dst, const ipc_msg_t* msg) {
     if (unlikely(!task))
         return -(i32)E_INVAL;
 
-    return port_send(task->port, msg, thread_get_self()->tid);
+    return port_send(task->port, msg, thread_self()->tid);
 }
 
 i32 ipc_recv(ipc_msg_t* out) {
-    return port_recv(thread_get_self()->task->port, out);
+    return port_recv(thread_self()->task->port, out);
 }
 
 i32 ipc_call(u32 dst, ipc_msg_t* msg) {
@@ -146,7 +146,7 @@ i32 ipc_call(u32 dst, ipc_msg_t* msg) {
     if (unlikely(!task))
         return -(i32)E_INVAL;
 
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     if (unlikely(!cur->reply_port))
         return -(i32)E_PERM;
 
@@ -162,7 +162,7 @@ i32 ipc_reply(u32 client, const ipc_msg_t* msg) {
     if (unlikely(!thread || !thread->reply_port))
         return -(i32)E_INVAL;
     
-    return port_send(thread->reply_port, msg, thread_get_self()->tid);
+    return port_send(thread->reply_port, msg, thread_self()->tid);
 }
 
 void __init ipc_init(void) {

@@ -1,6 +1,5 @@
 #include "arch/x86/idt.h"
 #include "arch/x86/pic.h"
-#include "dev/vga.h"
 #include "io/io.h"
 #include "kernel/panic.h"
 #include "kernel/sched.h"
@@ -53,10 +52,11 @@ void exception_handler(interrupt_frm_t* frm) {
         virt_addr_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
         if (likely(cr2 >= (virt_addr_t)skheap && cr2 < (virt_addr_t)ekheap)) {
-            vmm_demand_map(cr2 & ~(PG_SZ - 1u));
+            vmm_demand_map(cr2 & ~(PG_SZ - 1u), PG_FLAG_RW);
             return;
         }
     }
+
     PANIC("Error: CPU exception thrown");
 }
 

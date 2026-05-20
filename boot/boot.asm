@@ -29,7 +29,7 @@ _start:
     mov dword [__pa(mbi)], ebx
 
     ; Set up stack
-    mov esp, __pa(kstack_top)
+    mov esp, __pa(kernel_stack_top)
 
     ; Initialize swapper kernel page directory
     call setup_swapper_pg_dir
@@ -64,7 +64,7 @@ higher_half_kernel:
     mov cr3, eax
 
     ; Set up stack
-    mov esp, kstack_top
+    mov esp, kernel_stack_top
 
     ; GDT setup
     lgdt [gdt_desc]
@@ -80,7 +80,7 @@ higher_half_kernel:
     mov ss, ax
 
     ; Set up TSS
-    mov dword [task_state_seg + 4], kstack_top
+    mov dword [task_state_seg + 4], kernel_stack_top
     mov word [task_state_seg + 8], _KERNEL_DATA_SEG_SEL
 
     ; Set up TSS descriptor
@@ -144,6 +144,7 @@ gdt_kernel_data_seg_desc:
     db 0xCF
     db 0x00
 
+global gdt_user_code_seg_desc
 gdt_user_code_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -152,6 +153,7 @@ gdt_user_code_seg_desc:
     db 0xCF
     db 0x00
 
+global gdt_user_data_seg_desc
 gdt_user_data_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -177,7 +179,7 @@ task_state_seg:
 task_state_seg_end:
 
 alignb 16
-kstack_bottom:
+kernel_stack_bottom:
     resb 8192
-global kstack_top
-kstack_top:
+global kernel_stack_top
+kernel_stack_top:

@@ -8,7 +8,6 @@
 #include "lib/string.h"
 #include "loader/loader.h"
 #include "mm/page.h"
-#include "mm/pmm.h"
 #include "mm/vmm.h"
 
 static i32 is_valid_ehdr(const elf32_ehdr_t* ehdr, size_t sz) {
@@ -30,7 +29,7 @@ static i32 is_valid_ehdr(const elf32_ehdr_t* ehdr, size_t sz) {
     if (ehdr->e_ident[EI_CLASS] != ELFCLASS32)
         return -1;
 
-    if (ehdr->e_ident[EI_DATA] != ELFDATA2MSB)
+    if (ehdr->e_ident[EI_DATA] != ELFDATA2LSB)
         return -1;
 
     if (ehdr->e_ident[EI_VERSION] != EV_CURRENT)
@@ -102,7 +101,7 @@ virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
         return 0;
 
     const elf32_ehdr_t* ehdr = (const elf32_ehdr_t*)data;
-    if (unlikely(!is_valid_ehdr(ehdr, sz)))
+    if (unlikely(is_valid_ehdr(ehdr, sz) == -1))
         return 0;
 
     const elf32_phdr_t* phdr = (const elf32_phdr_t*)((const u8*)data + ehdr->e_phoff);
@@ -113,7 +112,7 @@ virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
         if (phdr[i].p_type != PT_LOAD)
             continue;
 
-        if (unlikely(!is_valid_load_seg(&phdr[i], sz)))
+        if (unlikely(is_valid_load_seg(&phdr[i], sz) == -1))
             return 0;
 
         /* PT_LOAD entries must be sorted by p_vaddr */
@@ -139,7 +138,7 @@ virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
             lo = cursor;
 
         for (virt_addr_t vaddr = lo; vaddr < hi; vaddr += PG_SZ)
-            vmm_demand_map(vaddr, pg_flags_at(phdr, phdr_cnt, vaddr));
+            vmm_demand_map(vaddr, PG_FLAG_USER | PG_FLAG_RW);
 
         if (hi > cursor)
             cursor = hi;
@@ -152,6 +151,16 @@ virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
         memcpy((void*)phdr[i].p_vaddr, (const u8*)data + phdr[i].p_offset, phdr[i].p_filesz);
         if (phdr[i].p_memsz > phdr[i].p_filesz)
             memset((void*)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, phdr[i].p_memsz - phdr[i].p_filesz);
+    }
+
+    for (u16 i = 0; i < phdr_cnt; i++) {
+        if (phdr[i].p_type != PT_LOAD)
+            continue;
+
+        virt_addr_t lo = ALIGN_DOWN_TO(phdr[i].p_vaddr, PG_SZ);
+        virt_addr_t hi = ALIGN_UP_TO(phdr[i].p_vaddr + phdr[i].p_memsz, PG_SZ);
+        for (virt_addr_t vaddr = lo; vaddr < hi; vaddr += PG_SZ)
+            vmm_set_pg_flags(vaddr, pg_flags_at(phdr, phdr_cnt, vaddr));
     }
 
     return ehdr->e_entry;

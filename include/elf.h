@@ -2,12 +2,6 @@
 
 #include "config.h"
 
-typedef u32 elf32_addr_t;
-typedef u16 elf32_half_t;
-typedef u32 elf32_off_t;
-typedef i32 elf32_sword_t;
-typedef u32 elf32_word_t;
-
 #define EI_MAG0        0      /* File identification    */
 #define EI_MAG1        1      /* File identification    */
 #define EI_MAG2        2      /* File identification    */
@@ -56,6 +50,12 @@ typedef u32 elf32_word_t;
 #define EV_NONE        0      /* Invalid version        */
 #define EV_CURRENT     1      /* Current version        */
 
+typedef u32 elf32_addr_t;
+typedef u16 elf32_half_t;
+typedef u32 elf32_off_t;
+typedef i32 elf32_sword_t;
+typedef u32 elf32_word_t;
+
 typedef struct elf32_ehdr_t {
     u8           e_ident[EI_NIDENT]; /* ELF identification                */
     elf32_half_t e_type;             /* Object file type                  */
@@ -87,7 +87,7 @@ typedef struct elf32_ehdr_t {
 #define PF_W       0x2        /* Writable segment            */
 #define PF_R       0x4        /* Readable segment            */
 
-typedef struct elf_phdr_t {
+typedef struct elf32_phdr_t {
 	elf32_word_t p_type;   /* Segment type 			   */
 	elf32_off_t  p_offset; /* Segment offset 		   */
 	elf32_addr_t p_vaddr;  /* Segment virtual address  */

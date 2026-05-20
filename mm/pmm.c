@@ -3,7 +3,6 @@
 #include "bits.h"
 #include "boot/setup.h"
 #include "config.h"
-#include "dev/vga.h"
 #include "lib/string.h"
 #include "mm/page.h"
 #include "mm/pmm.h"

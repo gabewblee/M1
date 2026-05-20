@@ -6,6 +6,7 @@
 #include "kernel/ipc.h"
 #include "kernel/panic.h"
 #include "kernel/sched.h"
+#include "kernel/services.h"
 #include "kernel/task.h"
 #include "kernel/thread.h"
 #include "mm/kheap.h"
@@ -18,18 +19,18 @@ extern phys_addr_t mbi;
 
 void __noreturn kmain(void) {
     console_init();
-    console_puts(VGA_FLAG, "Initialized terminal\n");
+    console_puts(ALL_FLAG, "Initialized terminal\n");
 
     idt_init();
-    console_puts(VGA_FLAG, "Initialized IDT\n");
+    console_puts(ALL_FLAG, "Initialized IDT\n");
 
     pic_init(0x20, 0x28);
-    console_puts(VGA_FLAG, "Initialized PIC\n");
+    console_puts(ALL_FLAG, "Initialized PIC\n");
 
     irq_clear_mask(0);
     irq_clear_mask(1);
     __asm__ volatile ("sti");
-    console_puts(VGA_FLAG, "Initialized interrupts\n");
+    console_puts(ALL_FLAG, "Initialized interrupts\n");
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         PANIC("Error: Invalid multiboot magic number");
@@ -39,26 +40,30 @@ void __noreturn kmain(void) {
         PANIC("Error: Invalid mmap provided by GRUB bootloader");
 
     pmm_init(mbinfo);
-    console_puts(VGA_FLAG, "Initialized PMM\n");
+    console_puts(ALL_FLAG, "Initialized PMM\n");
 
     vmm_init();
-    console_puts(VGA_FLAG, "Initialized VMM\n");
+    console_puts(ALL_FLAG, "Initialized VMM\n");
 
     kheap_init();
-    console_puts(VGA_FLAG, "Initialized kernel heap\n");
+    console_puts(ALL_FLAG, "Initialized kernel heap\n");
 
     sched_init();
-    console_puts(VGA_FLAG, "Initialized scheduler\n");
+    console_puts(ALL_FLAG, "Initialized scheduler\n");
 
     ipc_init();
-    console_puts(VGA_FLAG, "Initialized IPC\n");
+    console_puts(ALL_FLAG, "Initialized IPC\n");
 
-    ktask_init();
-    console_puts(VGA_FLAG, "Initialized kernel task\n");
+    task0_init();
+    console_puts(ALL_FLAG, "Initialized task0\n");
 
-    kthread_init();
-    console_puts(VGA_FLAG, "Initialized kernel thread\n");
+    thread0_init();
+    console_puts(ALL_FLAG, "Initialized thread0\n");
 
+    services_init();
+    console_puts(ALL_FLAG, "Initialized userspace services\n");
+
+    console_unregister_dev(EVGA_FLAG);
     pmm_free_init_section();
     for (;;);
 }

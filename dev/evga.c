@@ -1,5 +1,5 @@
 #include "config.h"
-#include "dev/vga.h"
+#include "dev/evga.h"
 #include "io/io.h"
 #include "mm/page.h"
 
@@ -69,7 +69,7 @@ static void backspace(void) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_putc(const char c) {
+void __init evga_putc(const char c) {
     if (c == '\0')
         return;
 
@@ -98,17 +98,17 @@ void vga_putc(const char c) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_puts(const char* str) {
+void __init evga_puts(const char* str) {
     while (*str)
-        vga_putc(*str++);
+    evga_putc(*str++);
 }
 
-void vga_write(const char* str, const size_t len) {
+void __init evga_write(const char* str, const size_t len) {
     for (size_t i = 0; i < len; i++)
-        vga_putc(str[i]);
+    evga_putc(str[i]);
 }
 
-void vga_clear(void) {
+void __init evga_clear(void) {
     u8 color = VGA_COLOR_BLACK;
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
     for (int i = 0; i < VGA_COLS * VGA_ROWS; i++)
@@ -119,8 +119,8 @@ void vga_clear(void) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_init(void) {
-    vga_clear();
+void __init evga_init(void) {
+    evga_clear();
 
     /* Enable hardware cursor */
     outb(0x3D4, 0x0A);

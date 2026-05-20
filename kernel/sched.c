@@ -23,7 +23,7 @@ static inline void run_queue_del(thread_ctrl_blk_t* thread) {
 }
 
 static void schedule(void) {
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     if (bitmap == 0) {
         if (unlikely(cur->state != THREAD_STATE_RUNNING))
             PANIC("Error: No runnable threads");
@@ -43,7 +43,7 @@ static void schedule(void) {
 }
 
 void sched_ready(thread_ctrl_blk_t* thread) {
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
 
     thread->state = THREAD_STATE_READY;
     run_queue_add(thread);
@@ -55,7 +55,7 @@ void sched_ready(thread_ctrl_blk_t* thread) {
 }
 
 void sched_block(list_node_t* wait_queue, thread_state_t state) {
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     cur->state             = state;
     list_add_to_tail(&cur->wait_link, wait_queue);
     schedule();
@@ -68,7 +68,7 @@ void sched_unblock(thread_ctrl_blk_t* thread) {
 
 void sched_yield(void) {
     ENTER_CRIT_SEC(flags);
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     cur->state             = THREAD_STATE_READY;
     cur->quantum           = SCHED_QUANTUM;
     run_queue_add(cur);
@@ -77,7 +77,7 @@ void sched_yield(void) {
 }
 
 void sched_tick(void) {
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
 
     sched_reap();
 
@@ -94,7 +94,7 @@ void sched_tick(void) {
 }
 
 void __noreturn sched_zombify(void) {
-    thread_ctrl_blk_t* cur = thread_get_self();
+    thread_ctrl_blk_t* cur = thread_self();
     cur->state             = THREAD_STATE_ZOMBIE;
     list_add_to_tail(&cur->run_link, &zombies);
     schedule();

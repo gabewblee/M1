@@ -37,6 +37,6 @@ task_ctrl_blk_t* task_create(phys_addr_t cr3);
 void task_destroy(task_ctrl_blk_t* task);
 
 /**
- * ktask_init - Initializes the kernel task. 
+ * task0_init - Initializes the kernel task. 
  */
-void __init ktask_init(void);
+void __init task0_init(void);
