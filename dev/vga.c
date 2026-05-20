@@ -1,5 +1,6 @@
 #include "config.h"
 #include "dev/vga.h"
+#include "io/io.h"
 #include "mm/page.h"
 
 #define VGA_COLS 80 /* VGA number of columns */
@@ -7,6 +8,10 @@
 
 u8 vga_cur_row = 0;
 u8 vga_cur_col = 0;
+
+/* Forward declarations */
+static void print_char(char c, u8 fcolor, u8 bcolor);
+static void print_string(const char* str, u8 fcolor, u8 bcolor);
 
 static void update_cursor(u8 row, u8 col) {
     u16 pos = row * VGA_COLS + col;
@@ -64,63 +69,7 @@ static void backspace(void) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_enable_cursor(u8 start, u8 end) {
-    outb(0x3D4, 0x0A);
-    outb(0x3D5, (inb(0x3D5) & 0xC0) | start);
-    outb(0x3D4, 0x0B);
-    outb(0x3D5, (inb(0x3D5) & 0xE0) | end);
-}
-
-void vga_disable_cursor(void) {
-    outb(0x3D4, 0x0A);
-    outb(0x3D5, 0x20);
-}
-
-void vga_print_hex(u32 num, u8 fcolor, u8 bcolor) {
-    const char hex_chars[] = "0123456789ABCDEF";
-    char buffer[11];
-    int i = 10;
-    
-    buffer[i--] = '\0';
-    
-    if (num == 0) {
-        vga_print_string("0x0", fcolor, bcolor);
-        return;
-    }
-    
-    while (num > 0) {
-        buffer[i--] = hex_chars[num & 0xF];
-        num >>= 4;
-    }
-    
-    buffer[i--] = 'x';
-    buffer[i] = '0';
-    
-    vga_print_string(&buffer[i], fcolor, bcolor);
-}
-
-void vga_print_decimal(u32 num, u8 fcolor, u8 bcolor) {
-    char buffer[21];
-    int i = 20;
-    
-    buffer[i--] = '\0';
-    
-    if (num == 0) {
-        vga_print_char('0', fcolor, bcolor);
-        return;
-    }
-    
-    while (num > 0) {
-        u64 q = num / 10;
-        u64 r = num - (q * 10);
-        buffer[i--] = '0' + r;
-        num = q;
-    }
-    
-    vga_print_string(&buffer[i + 1], fcolor, bcolor);
-}
-
-void vga_print_char(char c, u8 fcolor, u8 bcolor) {
+void vga_putc(const char c) {
     if (c == '\0')
         return;
 
@@ -140,7 +89,7 @@ void vga_print_char(char c, u8 fcolor, u8 bcolor) {
     }
 
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
-    u16 cell = (u16)(u8)c | ((u16)((bcolor << 4) | (fcolor & 0x0F)) << 8);
+    u16 cell = (u16)(u8)c | ((u16)((VGA_COLOR_BLACK << 4) | (VGA_COLOR_WHITE & 0x0F)) << 8);
     buf[vga_cur_row * VGA_COLS + vga_cur_col] = cell;
     vga_cur_col++;
     if (vga_cur_col >= VGA_COLS)
@@ -149,12 +98,18 @@ void vga_print_char(char c, u8 fcolor, u8 bcolor) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_print_string(const char* str, u8 fcolor, u8 bcolor) {
+void vga_puts(const char* str) {
     while (*str)
-        vga_print_char(*str++, fcolor, bcolor);
+        vga_putc(*str++);
 }
 
-void vga_clear_screen(u8 color) {
+void vga_write(const char* str, const size_t len) {
+    for (size_t i = 0; i < len; i++)
+        vga_putc(str[i]);
+}
+
+void vga_clear(void) {
+    u8 color = VGA_COLOR_BLACK;
     volatile u16* buf = (u16*)__va(VGA_PHYS_ADDR);
     for (int i = 0; i < VGA_COLS * VGA_ROWS; i++)
         buf[i] = (u16)color << 8 | ' ';
@@ -162,4 +117,14 @@ void vga_clear_screen(u8 color) {
     vga_cur_row = 0;
     vga_cur_col = 0;
     update_cursor(vga_cur_row, vga_cur_col);
+}
+
+void vga_init(void) {
+    vga_clear();
+
+    /* Enable hardware cursor */
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, (inb(0x3D5) & 0xC0) | 0);
+    outb(0x3D4, 0x0B);
+    outb(0x3D5, (inb(0x3D5) & 0xE0) | 15);
 }

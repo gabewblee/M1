@@ -5,6 +5,10 @@
 
 /* System configurations           */
 #define PG_SZ             4096       /* Page size                   */
+#define CONSOLE_MAX_CNT   8          /* Maximum console count       */
+
+/* Klog subsystem configurations   */
+#define KLOG_BUF_SZ       4096       /* Kernel log ring buffer size */
 
 /* VGA subsystem configurations    */
 #define VGA_COLOR_BLACK   0x00       /* VGA color black             */

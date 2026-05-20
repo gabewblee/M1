@@ -10,6 +10,8 @@ LDFLAGS = -T boot/linker.ld --no-warn-rwx-segments
 SRCS = arch/x86/idt.c   \
 	   arch/x86/pic.c   \
 	   boot/setup.c     \
+	   dev/console.c    \
+	   dev/klog.c       \
 	   dev/vga.c        \
 	   kernel/ipc.c     \
 	   kernel/kernel.c  \

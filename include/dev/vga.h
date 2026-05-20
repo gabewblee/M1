@@ -1,55 +1,32 @@
 #pragma once
 
-#include <stdint.h>
-
-#include "io/io.h"
+#include <stddef.h>
 
 /**
- * vga_enable_cursor - Enables the hardware text cursor.
- * @start: The starting scanline of the cursor.
- * @end: The ending scanline of the cursor.
+ * vga_putc - Writes a character to the screen.
+ * @c: The character to write.
  */
-void vga_enable_cursor(u8 start, u8 end);
+void vga_putc(const char c);
 
 /**
- * vga_disable_cursor - Disables the hardware text cursor.
+ * vga_puts - Writes a string to the screen.
+ * @str: The string to write.
  */
-void vga_disable_cursor(void);
+void vga_puts(const char* str);
 
 /**
- * vga_print_hex - Prints a hexadecimal number at the current cursor position.
- * @num: The number to print.
- * @fcolor: The foreground color of the number.
- * @bcolor: The background color of the number.
+ * vga_write - Writes a string to the screen.
+ * @str: The string to write.
+ * @len: The length of the string.
  */
-void vga_print_hex(u32 num, u8 fcolor, u8 bcolor);
+void vga_write(const char* str, const size_t len);
 
 /**
- * vga_print_decimal - Prints a decimal number at the current cursor position.
- * @num: The number to print.
- * @fcolor: The foreground color of the number.
- * @bcolor: The background color of the number.
+ * vga_clear - Clears the screen.
  */
-void vga_print_decimal(u32 num, u8 fcolor, u8 bcolor);
+void vga_clear(void);
 
 /**
- * vga_print_char - Prints a character at the current cursor position.
- * @c: The character to print.
- * @fcolor: The foreground color of the character.
- * @bcolor: The background color of the character.
+ * vga_init - Initializes the VGA device.
  */
-void vga_print_char(char c, u8 fcolor, u8 bcolor);
-
-/**
- * vga_print_string - Prints a string at the current cursor position.
- * @str: The string to print.
- * @fcolor: The foreground color of the string.
- * @bcolor: The background color of the string.
- */
-void vga_print_string(const char* str, u8 fcolor, u8 bcolor);
-
-/**
- * vga_clear_screen - Clears the screen with a single color.
- * @color: The color to clear the screen with.
- */
-void vga_clear_screen(u8 color);
+void vga_init(void);

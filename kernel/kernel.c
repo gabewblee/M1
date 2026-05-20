@@ -2,7 +2,7 @@
 #include "arch/x86/pic.h"
 #include "boot/multiboot.h"
 #include "config.h"
-#include "dev/vga.h"
+#include "dev/console.h"
 #include "kernel/ipc.h"
 #include "kernel/panic.h"
 #include "kernel/sched.h"
@@ -17,20 +17,19 @@ extern u32         magic;
 extern phys_addr_t mbi;
 
 void __noreturn kmain(void) {
-    vga_clear_screen(VGA_COLOR_BLACK);
-    vga_enable_cursor(0, 15);
-    vga_print_string("Initialized terminal\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_init();
+    console_puts(VGA_FLAG, "Initialized terminal\n");
 
     idt_init();
-    vga_print_string("Initialized IDT\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized IDT\n");
 
     pic_init(0x20, 0x28);
-    vga_print_string("Initialized PIC\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized PIC\n");
 
     irq_clear_mask(0);
     irq_clear_mask(1);
     __asm__ volatile ("sti");
-    vga_print_string("Initialized interrupts\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized interrupts\n");
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         PANIC("Error: Invalid multiboot magic number");
@@ -40,25 +39,25 @@ void __noreturn kmain(void) {
         PANIC("Error: Invalid mmap provided by GRUB bootloader");
 
     pmm_init(mbinfo);
-    vga_print_string("Initialized PMM\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized PMM\n");
 
     vmm_init();
-    vga_print_string("Initialized VMM\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized VMM\n");
 
     kheap_init();
-    vga_print_string("Initialized kernel heap\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized kernel heap\n");
 
     sched_init();
-    vga_print_string("Initialized scheduler\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized scheduler\n");
 
     ipc_init();
-    vga_print_string("Initialized IPC\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized IPC\n");
 
     ktask_init();
-    vga_print_string("Initialized kernel task\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized kernel task\n");
 
     kthread_init();
-    vga_print_string("Initialized kernel thread\n", VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    console_puts(VGA_FLAG, "Initialized kernel thread\n");
 
     pmm_free_init_section();
     for (;;);
