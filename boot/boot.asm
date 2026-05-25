@@ -5,12 +5,12 @@ MEMINFO  equ 1 << 1
 MBFLAGS  equ MBALIGN | MEMINFO
 CHECKSUM equ -(MAGIC + MBFLAGS)
 
-%define PG_SZ                4096
-%define HIGHER_HALF_OFFSET   0xC0000000
-%define _KERNEL_CODE_SEG_SEL gdt_kernel_code_seg_desc - gdt_start
-%define _KERNEL_DATA_SEG_SEL gdt_kernel_data_seg_desc - gdt_start
-%define _TASK_STATE_SEG_SEL  gdt_task_state_seg_desc - gdt_start
-%define __pa(x)              ((x) - HIGHER_HALF_OFFSET)
+%define PG_SZ               4096
+%define HIGHER_HALF_OFFSET  0xC0000000
+%define KERNEL_CODE_SEG_SEL gdt_kernel_code_seg_desc - gdt_start
+%define KERNEL_DATA_SEG_SEL gdt_kernel_data_seg_desc - gdt_start
+%define TASK_STATE_SEG_SEL  gdt_task_state_seg_desc - gdt_start
+%define __pa(x)             ((x) - HIGHER_HALF_OFFSET)
 
 extern swapper_pg_dir
 extern swapper_pg_table_cnt
@@ -29,12 +29,12 @@ _start:
     mov dword [__pa(mbi)], ebx
 
     ; Set up stack
-    mov esp, __pa(kstack_top)
+    mov esp, __pa(kernel_stack_top)
 
-    ; Initialize swapper kernel page directory
+    ; Initialize swapper page directory
     call setup_swapper_pg_dir
 
-    ; Load swapper kernel page directory
+    ; Load swapper page directory
     mov eax, __pa(swapper_pg_dir)
     mov cr3, eax
 
@@ -64,15 +64,15 @@ higher_half_kernel:
     mov cr3, eax
 
     ; Set up stack
-    mov esp, kstack_top
+    mov esp, kernel_stack_top
 
     ; GDT setup
     lgdt [gdt_desc]
-    jmp _KERNEL_CODE_SEG_SEL:.reload
+    jmp KERNEL_CODE_SEG_SEL:.reload
         
 .reload:
     ; Reload segment registers
-    mov ax, _KERNEL_DATA_SEG_SEL 
+    mov ax, KERNEL_DATA_SEG_SEL 
     mov ds, ax
     mov es, ax
     mov fs, ax
@@ -80,8 +80,8 @@ higher_half_kernel:
     mov ss, ax
 
     ; Set up TSS
-    mov dword [task_state_seg + 4], kstack_top
-    mov word [task_state_seg + 8], _KERNEL_DATA_SEG_SEL
+    mov dword [task_state_seg + 4], kernel_stack_top
+    mov word [task_state_seg + 8], KERNEL_DATA_SEG_SEL
 
     ; Set up TSS descriptor
     mov word [gdt_task_state_seg_desc + 0], task_state_seg_end - task_state_seg_start - 1
@@ -94,7 +94,7 @@ higher_half_kernel:
     mov byte [gdt_task_state_seg_desc + 7], ah
 
     ; Load TSS
-    mov ax, _TASK_STATE_SEG_SEL
+    mov ax, TASK_STATE_SEG_SEL
     ltr ax
     
     ; Enter C code
@@ -144,6 +144,7 @@ gdt_kernel_data_seg_desc:
     db 0xCF
     db 0x00
 
+global gdt_user_code_seg_desc
 gdt_user_code_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -152,6 +153,7 @@ gdt_user_code_seg_desc:
     db 0xCF
     db 0x00
 
+global gdt_user_data_seg_desc
 gdt_user_data_seg_desc:
     dw 0xFFFF
     dw 0x0000
@@ -177,7 +179,7 @@ task_state_seg:
 task_state_seg_end:
 
 alignb 16
-kstack_bottom:
+kernel_stack_bottom:
     resb 8192
-global kstack_top
-kstack_top:
+global kernel_stack_top
+kernel_stack_top:

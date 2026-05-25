@@ -1,6 +1,6 @@
 #include <stdint.h>
 
-#include "string.h"
+#include "lib/string.h"
 
 void* memset(void* str, int c, size_t n) {
     unsigned char* ptr = (unsigned char*)str;
@@ -26,4 +26,13 @@ void* memcpy(void* dst, const void* src, size_t n) {
         dest[i] = source[i];
 
     return dst;
+}
+
+int strcmp(const char* a, const char* b) {
+    while (*a && *a == *b) {
+        a++;
+        b++;
+    }
+
+    return (unsigned char)*a - (unsigned char)*b;
 }

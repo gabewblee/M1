@@ -1,65 +1,67 @@
-#include "idt.h"
-#include "ipc.h"
-#include "panic.h"
-#include "pic.h"
-#include "sched.h"
-#include "task.h"
-#include "thread.h"
-
-#include "../boot/multiboot.h"
-#include "../config.h"
-#include "../drivers/vga.h"
-#include "../mm/kheap.h"
-#include "../mm/pmm.h"
-#include "../mm/vmm.h"
+#include "arch/x86/idt.h"
+#include "arch/x86/pic.h"
+#include "boot/multiboot.h"
+#include "config.h"
+#include "dev/console.h"
+#include "kernel/ipc.h"
+#include "kernel/panic.h"
+#include "kernel/sched.h"
+#include "kernel/servers.h"
+#include "kernel/task.h"
+#include "kernel/thread.h"
+#include "mm/kheap.h"
+#include "mm/page.h"
+#include "mm/pmm.h"
+#include "mm/vmm.h"
 
 extern u32         magic;
 extern phys_addr_t mbi;
 
 void __noreturn kmain(void) {
-    vga_clear_screen(VGA_BLACK_COLOR);
-    vga_enable_cursor(0, 15);
-    vga_print_string("Initialized terminal\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_init();
+    console_puts(ALL_FLAG, "[M1] Initialized terminal\n");
 
     idt_init();
-    vga_print_string("Initialized IDT\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized IDT\n");
 
     pic_init(0x20, 0x28);
-    vga_print_string("Initialized PIC\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized PIC\n");
+
+    sched_init();
+    console_puts(ALL_FLAG, "[M1] Initialized scheduler\n");
 
     irq_clear_mask(0);
-    irq_clear_mask(1);
     __asm__ volatile ("sti");
-    vga_print_string("Initialized interrupts\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized interrupts\n");
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         PANIC("Error: Invalid multiboot magic number");
 
-    multiboot_info_t* mbinfo = (multiboot_info_t*)(__va(mbi));
+    const multiboot_info_t* mbinfo = (const multiboot_info_t*)(__va(mbi));
     if(!(mbinfo->flags >> 6 & 0x1))
         PANIC("Error: Invalid mmap provided by GRUB bootloader");
 
     pmm_init(mbinfo);
-    vga_print_string("Initialized PMM\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized PMM\n");
 
     vmm_init();
-    vga_print_string("Initialized VMM\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized VMM\n");
 
     kheap_init();
-    vga_print_string("Initialized kernel heap\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
-
-    sched_init();
-    vga_print_string("Initialized scheduler\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized kernel heap\n");
 
     ipc_init();
-    vga_print_string("Initialized IPC\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    console_puts(ALL_FLAG, "[M1] Initialized IPC\n");
 
-    task_init();
-    vga_print_string("Initialized kernel task\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    task0_init();
+    console_puts(ALL_FLAG, "[M1] Initialized task0\n");
 
-    thread_init();
-    vga_print_string("Initialized threads\n", VGA_WHITE_COLOR, VGA_BLACK_COLOR);
+    thread0_init();
+    console_puts(ALL_FLAG, "[M1] Initialized thread0\n");
+
+    console_unregister_dev(EVGA_FLAG);
+    servers_init();
 
     pmm_free_init_section();
-    for (;;);
+    for (;;) sched_yield();
 }

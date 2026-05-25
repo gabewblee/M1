@@ -1,168 +1,211 @@
 #include <stddef.h>
 
-#include "idt.h"
-#include "ipc.h"
-#include "sched.h"
-#include "syscall.h"
-#include "task.h"
-#include "thread.h"
+#include "config.h"
+#include "kernel/ipc.h"
+#include "kernel/sched.h"
+#include "kernel/task.h"
+#include "kernel/thread.h"
+#include "lib/list.h"
+#include "lib/string.h"
+#include "mm/kheap.h"
+#include "mm/page.h"
+#include "uapi.h"
 
-#include "../lib/list.h"
-#include "../lib/string.h"
-#include "../mm/kheap.h"
+static void copy_from_user(phys_addr_t user_pg_dir, void* dst, const void* src, size_t nbytes) {
+    phys_addr_t old_pg_dir;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(old_pg_dir) : : "memory");
+    if (user_pg_dir != old_pg_dir)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(user_pg_dir) : "memory");
 
-extern thread_ctrl_blk_t* cur_running_thread;
+    memcpy(dst, src, nbytes);
+    if (user_pg_dir != old_pg_dir)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(old_pg_dir) : "memory");
+}
 
-static i32 __port_send(port_t* port, const ipc_msg_t* msg, u32 sender) {
-    enter_crit_sec(flags);
+static void copy_to_user(phys_addr_t user_pg_dir, void* dst, const void* src, size_t nbytes) {
+    copy_from_user(user_pg_dir, dst, src, nbytes);
+}
+
+static void deliver(thread_ctrl_blk_t* recv, const ipc_msg_t* msg, u32 sender) {
+    u8 kbuf[IPC_MSG_SZ];
+    const thread_ctrl_blk_t* cur = thread_self();
+
+    /* This function call might be unnecessary */
+    copy_from_user(cur->cr3, kbuf, msg, IPC_MSG_SZ);
+    ((ipc_msg_t*)kbuf)->sender = sender;
+
+    copy_to_user(recv->cr3, recv->rx_msg, kbuf, IPC_MSG_SZ);
+    recv->rx_msg = NULL;
+}
+
+static i32 __hot port_send(port_t* port, const ipc_msg_t* msg, u32 sender) {
+    ENTER_CRIT_SEC(flags1);
+    /* If there are blocked receivers, deliver the message directly to them */
     if (!list_is_empty(&port->receivers)) {
         thread_ctrl_blk_t* recv = list_first_entry(
-            &port->receivers, thread_ctrl_blk_t, run_link
+            &port->receivers, thread_ctrl_blk_t, wait_link
         );
 
-        memcpy(recv->rx_msg, msg, sizeof(*msg));
-        recv->rx_msg->sender = sender;
-        recv->rx_msg         = NULL;
-
+        deliver(recv, msg, sender);
+        EXIT_CRIT_SEC(flags1);
         sched_unblock(recv);
-        exit_crit_sec(flags);
         return E_OK;
     }
 
-    if (port->queue_len < port->queue_cap) {
-        ipc_msg_t* slot = (ipc_msg_t*)kmalloc(sizeof(*slot));
+    /* If the port has space, enqueue the message in the port's message queue */
+    if (port->cnt < port->cap) {
+        ipc_msg_ext_t* slot = (ipc_msg_ext_t*)kmalloc(sizeof(ipc_msg_ext_t));
         if (unlikely(!slot)) {
-            exit_crit_sec(flags);
+            EXIT_CRIT_SEC(flags1);
             return -(i32)E_NOMEM;
         }
-        memcpy(slot, msg, sizeof(*slot));
-        slot->sender = sender;
+
+        copy_from_user(thread_self()->cr3, &slot->msg, msg, IPC_MSG_SZ);
+        slot->msg.sender = sender;
+
         list_init(&slot->link);
         list_add_to_tail(&slot->link, &port->messages);
-        port->queue_len++;
+        port->cnt++;
 
-        exit_crit_sec(flags);
+        EXIT_CRIT_SEC(flags1);
         return E_OK;
     }
 
-    cur_running_thread->tx_msg = msg;
-    sched_block(&port->senders, THREAD_STATE_BLOCKED);
-    cur_running_thread->tx_msg = NULL;
+    /* If the port is full, block the sender */
+    thread_ctrl_blk_t* cur = thread_self();
+    cur->tx_msg            = msg;
 
-    exit_crit_sec(flags);
+    EXIT_CRIT_SEC(flags1);
+    sched_block(&port->senders, THREAD_STATE_BLOCKED);
+
+    ENTER_CRIT_SEC(flags2);
+    cur->tx_msg = NULL;
+    EXIT_CRIT_SEC(flags2);
     return E_OK;
 }
 
-static i32 __port_recv(port_t* port, ipc_msg_t* out) {
-    enter_crit_sec(flags);
+static i32 __hot port_recv(port_t* port, ipc_msg_t* out) {
+    ENTER_CRIT_SEC(flags1);
+    /* If there are enqueued messages, deliver the message directly to the caller */
     if (!list_is_empty(&port->messages)) {
-        ipc_msg_t* slot = list_first_entry(&port->messages, ipc_msg_t, link);
+        ipc_msg_ext_t* slot = list_first_entry(&port->messages, ipc_msg_ext_t, link);
 
         list_del(&slot->link);
-        port->queue_len--;
+        port->cnt--;
 
-        memcpy(out, slot, sizeof(*out));
+        copy_to_user(thread_self()->cr3, out, &slot->msg, IPC_MSG_SZ);
         if (!list_is_empty(&port->senders)) {
-            thread_ctrl_blk_t* snd = list_first_entry(
-                &port->senders, thread_ctrl_blk_t, run_link
+            /* Reuse previously allocated message slot */
+            thread_ctrl_blk_t* sender = list_first_entry(
+                &port->senders, thread_ctrl_blk_t, wait_link
             );
 
-            memcpy(slot, snd->tx_msg, sizeof(*slot));
-            slot->sender = snd->tid;
+            copy_from_user(sender->cr3, &slot->msg, sender->tx_msg, IPC_MSG_SZ);
+            slot->msg.sender = sender->tid;
+
             list_init(&slot->link);
             list_add_to_tail(&slot->link, &port->messages);
-            port->queue_len++;
+            port->cnt++;
 
-            snd->tx_msg = NULL;
-            sched_unblock(snd);
-        } else {
-            kfree(slot);
+            sender->tx_msg = NULL;
+            EXIT_CRIT_SEC(flags1);
+            sched_unblock(sender);
+            return E_OK;
         }
 
-        exit_crit_sec(flags);
+        kfree(slot);
+        EXIT_CRIT_SEC(flags1);
         return E_OK;
     }
 
+    /* If there are blocked senders, retrieve message directly from sender */
     if (!list_is_empty(&port->senders)) {
-        thread_ctrl_blk_t* snd = list_first_entry(
-            &port->senders, thread_ctrl_blk_t, run_link
+        thread_ctrl_blk_t* sender = list_first_entry(
+            &port->senders, thread_ctrl_blk_t, wait_link
         );
 
-        memcpy(out, snd->tx_msg, sizeof(*out));
-        out->sender = snd->tid;
-        snd->tx_msg = NULL;
+        {
+            u8 buf[IPC_MSG_SZ];
+            copy_from_user(sender->cr3, buf, sender->tx_msg, IPC_MSG_SZ);
+            ((ipc_msg_t*)buf)->sender = sender->tid;
+            copy_to_user(thread_self()->cr3, out, buf, IPC_MSG_SZ);
+        }
+        sender->tx_msg = NULL;
 
-        sched_unblock(snd);
-        exit_crit_sec(flags);
+        EXIT_CRIT_SEC(flags1);
+        sched_unblock(sender);
         return E_OK;
     }
 
-    cur_running_thread->rx_msg = out;
-    sched_block(&port->receivers, THREAD_STATE_BLOCKED);
-    cur_running_thread->rx_msg = NULL;
+    /* Block the receiver until a message is available */
+    thread_ctrl_blk_t* cur = thread_self();
+    cur->rx_msg            = out;
 
-    exit_crit_sec(flags);
+    EXIT_CRIT_SEC(flags1);
+    sched_block(&port->receivers, THREAD_STATE_BLOCKED);
+
+    ENTER_CRIT_SEC(flags2);
+    cur->rx_msg = NULL;
+    EXIT_CRIT_SEC(flags2);
     return E_OK;
 }
 
 port_t* port_create(u32 capacity) {
-    port_t* port = (port_t*)kmalloc(sizeof(*port));
+    port_t* port = (port_t*)kmalloc(sizeof(port_t));
     if (unlikely(!port))
         return NULL;
 
     list_init(&port->messages);
     list_init(&port->receivers);
     list_init(&port->senders);
-    port->queue_len = 0;
-    port->queue_cap = capacity;
+
+    port->cnt = 0; port->cap = capacity;
     return port;
 }
 
 void port_destroy(port_t* port) {
-    if (unlikely(!port))
-        return;
-
     while (!list_is_empty(&port->messages)) {
-        ipc_msg_t* msg = list_first_entry(&port->messages, ipc_msg_t, link);
-        
-        list_del(&msg->link);
-        kfree(msg);
+        ipc_msg_ext_t* slot = list_first_entry(&port->messages, ipc_msg_ext_t, link);
+        list_del(&slot->link);
+        kfree(slot);
     }
     kfree(port);
 }
 
 i32 ipc_send(u32 dst, const ipc_msg_t* msg) {
-    task_ctrl_blk_t* task = task_lookup(dst);
+    const task_ctrl_blk_t* task = task_lookup(dst);
     if (unlikely(!task))
         return -(i32)E_INVAL;
-    return __port_send(task->port, msg, cur_running_thread->tid);
+
+    return port_send(task->port, msg, thread_self()->tid);
 }
 
 i32 ipc_recv(ipc_msg_t* out) {
-    return __port_recv(cur_running_thread->task->port, out);
+    return port_recv(thread_self()->task->port, out);
 }
 
 i32 ipc_call(u32 dst, ipc_msg_t* msg) {
-    task_ctrl_blk_t* task = task_lookup(dst);
+    const task_ctrl_blk_t* task = task_lookup(dst);
     if (unlikely(!task))
         return -(i32)E_INVAL;
 
-    if (unlikely(!cur_running_thread->reply_port))
+    thread_ctrl_blk_t* cur = thread_self();
+    if (unlikely(!cur->reply_port))
         return -(i32)E_PERM;
 
-    i32 ret = __port_send(task->port, msg, cur_running_thread->tid);
+    i32 ret = port_send(task->port, msg, cur->tid);
     if (unlikely(ret != E_OK))
         return ret;
 
-    return __port_recv(cur_running_thread->reply_port, msg);
+    return port_recv(cur->reply_port, msg);
 }
 
 i32 ipc_reply(u32 client, const ipc_msg_t* msg) {
-    thread_ctrl_blk_t* task = thread_lookup(client);
-    if (unlikely(!task || !task->reply_port))
+    const thread_ctrl_blk_t* thread = thread_lookup(client);
+    if (unlikely(!thread || !thread->reply_port))
         return -(i32)E_INVAL;
-    
-    return __port_send(task->reply_port, msg, cur_running_thread->tid);
+
+    return port_send(thread->reply_port, msg, thread_self()->tid);
 }
 
 void __init ipc_init(void) {

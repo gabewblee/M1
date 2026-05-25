@@ -1,0 +1,60 @@
+M1 microkernel
+==============
+
+What is this?
+-------------
+
+M1 is a microkernel operating system. It provides core mechanisms for address
+space isolation, inter-process communication, and scheduling. All other system
+services - drivers, filesystems, network stacks, etc - run as isolated 
+user-space servers that communicate through message passing.
+
+
+Requirements
+------------
+
+* nasm
+* i686-elf-gcc
+* i686-elf-ld
+* grub-mkrescue
+* qemu-system-i386
+
+
+Building
+--------
+
+The build script expects the cross toolchain to be under $HOME/opt/cross. To
+build the kernel components:
+
+	bash build.sh
+
+To remove build artifacts:
+
+	make clean
+
+For more information on building the cross toolchain, see:
+
+	https://wiki.osdev.org/GCC_Cross-Compiler
+
+
+Running
+-------
+
+To run it in QEMU:
+
+	make run
+
+
+Project Layout
+--------------
+
+arch/   	Architecture-specific code
+boot/   	Kernel initialization code
+dev/    	In-kernel device drivers
+include/	Kernel headers
+iso/    	Bootloader configurations
+kernel/ 	Core microkernel services
+lib/    	Shared kernel code
+loader/ 	ELF loader
+mm/     	Memory management
+servers/	User-space servers
