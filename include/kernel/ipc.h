@@ -2,7 +2,8 @@
 
 #include "config.h"
 #include "lib/list.h"
-#include "uapi.h"
+#include "kernel/syscall.h"
+#include "uapi/ipc.h"
 
 typedef struct port_t {
     list_node_t messages;  /* Message queue                 */
@@ -16,9 +17,6 @@ typedef struct ipc_msg_ext_t {
     ipc_msg_t   msg;  /* IPC message        */
     list_node_t link; /* Message queue node */
 } ipc_msg_ext_t;
-
-_Static_assert(offsetof(ipc_msg_ext_t, msg) == 0, "Error: ipc_msg_ext_t.msg is not at offset 0");
-_Static_assert(offsetof(ipc_msg_ext_t, link) == IPC_MSG_SZ, "Error: ipc_msg_ext_t.link is not at offset IPC_MSG_SZ");
 
 /**
  * port_create - Allocates a port with capacity @capacity.

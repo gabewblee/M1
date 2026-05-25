@@ -62,12 +62,12 @@ void console_putc(u32 flags, const char c);
 void console_puts(u32 flags, const char* str);
 
 /**
- * console_write - Writes @str to consoles matching @flags, up to @len bytes.
+ * console_write - Writes @buf to consoles matching @flags, up to @len bytes.
  * @flags: The flags selecting consoles to write to.
- * @str: The buffer to write.
+ * @buf: The buffer to write.
  * @len: The buffer length.
  */
-void console_write(u32 flags, const char* str, size_t len);
+void console_write(u32 flags, const char* buf, size_t len);
 
 /**
  * console_clear - Clears consoles matching @flags.

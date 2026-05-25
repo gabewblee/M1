@@ -2,9 +2,10 @@
 #include "dispatch.h"
 #include "driver.h"
 #include "servers/vga.h"
-#include "uapi.h"
+#include "uapi/uapi.h"
 
-#include "../lib/syscall.h"
+#include "../libc/syscall.h"
+#include "../libc/string.h"
 
 static i32 handle_putc(const ipc_msg_t* msg) {
     const vga_server_req_t* req = (const vga_server_req_t*)msg->data;
@@ -60,9 +61,10 @@ i32 dispatch(ipc_msg_t* msg) {
     }
 
     msg->sz = sizeof(i32);
-    __builtin_memcpy(msg->data, &ret, sizeof(ret));
+    memcpy(msg->data, &ret, sizeof(ret));
     return ret;
 }
 
 void fini(void) {
+    sys_unmap_pg((void*)VGA_ADDR);
 }

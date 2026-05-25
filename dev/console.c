@@ -72,10 +72,10 @@ void console_puts(u32 flags, const char* str) {
             consoles[i].puts(str);
 }
 
-void console_write(u32 flags, const char* str, size_t len) {
+void console_write(u32 flags, const char* buf, size_t len) {
     for (size_t i = 0; i < cnt; i++)
         if (consoles[i].flags & flags)
-            consoles[i].write(str, len);
+            consoles[i].write(buf, len);
 }
 
 void console_clear(u32 flags) {

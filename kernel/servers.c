@@ -9,10 +9,12 @@
 #include "loader/loader.h"
 #include "mm/page.h"
 #include "mm/vmm.h"
-#include "uapi.h"
+#include "uapi/mm.h"
 
 extern const u8 _binary_build_servers_vga_bin_start[];
 extern const u8 _binary_build_servers_vga_bin_end[];
+extern const u8 _binary_build_servers_ps2_keyboard_bin_start[];
+extern const u8 _binary_build_servers_ps2_keyboard_bin_end[];
 
 #define STACK_PG_CNT 4u                                    /* Stack page count */
 #define GUARD_PG_CNT 1u                                    /* Guard page count */
@@ -20,7 +22,8 @@ extern const u8 _binary_build_servers_vga_bin_end[];
 
 /* X(name, start, end, priority, iopl) */
 #define SERVERS(X) \
-    X(vga, _binary_build_servers_vga_bin_start, _binary_build_servers_vga_bin_end, 1, 3)
+    X(vga, _binary_build_servers_vga_bin_start, _binary_build_servers_vga_bin_end, 1, 3) \
+    X(ps2 keyboard, _binary_build_servers_ps2_keyboard_bin_start, _binary_build_servers_ps2_keyboard_bin_end, 1, 3)
 
 typedef struct server_info_t {
     const char* name;     /* Server name         */

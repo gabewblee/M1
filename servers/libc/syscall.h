@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uapi.h"
+#include "uapi/uapi.h"
 
 /**
  * sys_ipc_send - Sends @msg to @dst.

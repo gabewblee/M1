@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 #include "types.h"
-#include "uapi.h"
+#include "uapi/uapi.h"
 
 #define VGA_SERVER_NAME "vga"
 

@@ -99,9 +99,9 @@ void __init evga_puts(const char* str) {
     evga_putc(*str++);
 }
 
-void __init evga_write(const char* str, const size_t len) {
+void __init evga_write(const char* buf, const size_t len) {
     for (size_t i = 0; i < len; i++)
-    evga_putc(str[i]);
+    evga_putc(buf[i]);
 }
 
 void __init evga_clear(void) {

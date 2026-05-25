@@ -33,9 +33,9 @@ void klog_puts(const char* str) {
         klog_putc(str[i]);
 }
 
-void klog_write(const char* str, const size_t len) {
+void klog_write(const char* buf, const size_t len) {
     for (size_t i = 0; i < len; i++)
-        klog_putc(str[i]);
+        klog_putc(buf[i]);
 }
 
 void klog_clear(void) {

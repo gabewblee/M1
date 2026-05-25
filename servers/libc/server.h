@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uapi.h"
+#include "uapi/uapi.h"
 
 typedef struct server_t {
     const char* name;                        /* Server name             */

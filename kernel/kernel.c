@@ -59,8 +59,8 @@ void __noreturn kmain(void) {
     thread0_init();
     console_puts(ALL_FLAG, "[M1] Initialized thread0\n");
 
-    console_unregister_dev(EVGA_FLAG);
     servers_init();
+    console_unregister_dev(EVGA_FLAG);
 
     pmm_free_init_section();
     for (;;) sched_yield();

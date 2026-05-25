@@ -1,9 +1,9 @@
 #include "dispatch.h"
 
-#include "../libc/server.h"
+#include "../../libc/server.h"
 
 static const server_t server = {
-    .name     = "vga",
+    .name     = "PS/2 keyboard",
     .init     = init,
     .dispatch = dispatch,
     .fini     = fini,

@@ -66,8 +66,12 @@ void idt_unregister_handler(u8 vector) {
 void int_handler(const int_frm_t* frm) {
     u8 vector = frm->int_no;
     int_handler_func_t handler = handlers[vector];
-    if (unlikely(!handler))
+    if (unlikely(!handler)) {
+        if (vector < IDT_EXC_CNT)
+            PANIC("Error: Unhandled CPU exception");
+
         return;
+    }
 
     handler(frm);
     if (vector >= IDT_EXC_CNT)

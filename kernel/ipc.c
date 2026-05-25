@@ -3,27 +3,40 @@
 #include "config.h"
 #include "kernel/ipc.h"
 #include "kernel/sched.h"
+#include "kernel/syscall.h"
 #include "kernel/task.h"
 #include "kernel/thread.h"
 #include "lib/list.h"
 #include "lib/string.h"
 #include "mm/kheap.h"
 #include "mm/page.h"
-#include "uapi.h"
+#include "mm/vmm.h"
+#include "uapi/ipc.h"
 
 static void copy_from_user(phys_addr_t user_pg_dir, void* dst, const void* src, size_t nbytes) {
-    phys_addr_t old_pg_dir;
+    phys_addr_t old_pg_dir, kcr3 = task_lookup(0)->cr3;
     __asm__ volatile("mov %%cr3, %0" : "=r"(old_pg_dir) : : "memory");
-    if (user_pg_dir != old_pg_dir)
-        __asm__ volatile("mov %0, %%cr3" : : "r"(user_pg_dir) : "memory");
 
-    memcpy(dst, src, nbytes);
-    if (user_pg_dir != old_pg_dir)
-        __asm__ volatile("mov %0, %%cr3" : : "r"(old_pg_dir) : "memory");
+    __asm__ volatile("mov %0, %%cr3" : : "r"(user_pg_dir) : "memory");
+    memcpy((void*)VMM_IPC_SCRATCH, src, nbytes);
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(kcr3) : "memory");
+    memcpy(dst, (void*)VMM_IPC_SCRATCH, nbytes);
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(old_pg_dir) : "memory");
 }
 
 static void copy_to_user(phys_addr_t user_pg_dir, void* dst, const void* src, size_t nbytes) {
-    copy_from_user(user_pg_dir, dst, src, nbytes);
+    phys_addr_t old_pg_dir, kcr3 = task_lookup(0)->cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(old_pg_dir) : : "memory");
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(kcr3) : "memory");
+    memcpy((void*)VMM_IPC_SCRATCH, src, nbytes);
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(user_pg_dir) : "memory");
+    memcpy(dst, (void*)VMM_IPC_SCRATCH, nbytes);
+
+    __asm__ volatile("mov %0, %%cr3" : : "r"(old_pg_dir) : "memory");
 }
 
 static void deliver(thread_ctrl_blk_t* recv, const ipc_msg_t* msg, u32 sender) {

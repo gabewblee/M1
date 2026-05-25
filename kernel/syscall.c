@@ -9,14 +9,27 @@
 #include "lib/string.h"
 #include "mm/page.h"
 #include "mm/vmm.h"
-#include "uapi.h"
+#include "uapi/ipc.h"
+#include "uapi/sysops.h"
+
+#define SYSCALLS(X)                        \
+    X(SYS_ipc_send,      ipc_send,      2) \
+    X(SYS_ipc_recv,      ipc_recv,      1) \
+    X(SYS_ipc_call,      ipc_call,      2) \
+    X(SYS_ipc_reply,     ipc_reply,     2) \
+    X(SYS_thread_create, thread_create, 2) \
+    X(SYS_thread_yield,  thread_yield,  0) \
+    X(SYS_thread_exit,   thread_exit,   1) \
+    X(SYS_map_pg,        map_pg,        3) \
+    X(SYS_unmap_pg,      unmap_pg,      1) \
+    X(SYS_max,           max,           0)
 
 #define SYSCALL_DECL_0(name) static i32 sys_##name(void)
 #define SYSCALL_DECL_1(name) static i32 sys_##name(u32)
 #define SYSCALL_DECL_2(name) static i32 sys_##name(u32, u32)
 #define SYSCALL_DECL_3(name) static i32 sys_##name(u32, u32, u32)
 #define SYSCALL_DECL_4(name) static i32 sys_##name(u32, u32, u32, u32)
-#define SYSCALL_FWD_DECL(id, name, argc) SYSCALL_DECL_##argc(name);
+#define SYSCALL_FWD_DECL(no, name, argc) SYSCALL_DECL_##argc(name);
 SYSCALLS(SYSCALL_FWD_DECL)
 #undef SYSCALL_FWD_DECL
 
@@ -28,7 +41,7 @@ SYSCALLS(SYSCALL_FWD_DECL)
 
 static i32 sysop_exec(ipc_msg_t* msg) {
     const sysop_msg_t* req = (const sysop_msg_t*)msg->data;
-    switch ((sysop_no_t)msg->id) {
+    switch (msg->id) {
         case SYSOP_log_read: {
             u32 dst = req->arg0, len = req->arg1, off = req->arg2;
             return (i32)klog_read((char*)dst, (size_t)len, (size_t)off);
@@ -99,7 +112,7 @@ static i32 sys_max(void) {
 
 i32 syscall_handler(syscall_frm_t* frm) {
     static const void* const dispatch[SYS_max + 1] __aligned(64) = {
-        #define SYSCALL_LBL(id, name, argc) [id] = &&l_##name,
+        #define SYSCALL_LBL(no, name, argc) [no] = &&l_##name,
         SYSCALLS(SYSCALL_LBL)
         #undef SYSCALL_LBL
     };
@@ -111,7 +124,7 @@ i32 syscall_handler(syscall_frm_t* frm) {
     syscall_no = likely(syscall_no < SYS_max) ? syscall_no : SYS_max;
     goto *dispatch[syscall_no];
 
-    #define SYSCALL(id, name, argc) \
+    #define SYSCALL(no, name, argc) \
     l_##name:                       \
         return sys_##name(SYSCALL_ARGS_##argc(frm));
     SYSCALLS(SYSCALL)

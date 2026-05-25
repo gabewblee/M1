@@ -1,9 +1,13 @@
 #pragma once
 
 #include "config.h"
-#include "uapi.h"
+#include "uapi/mm.h"
 
 typedef struct int_frm_t int_frm_t;
+
+#define VMM_SCRATCH_BASE 0xFEC00000u                /* Scratch page table virtual address */
+#define VMM_MMU_SCRATCH  VMM_SCRATCH_BASE           /* MMU scratch frame virtual address  */
+#define VMM_IPC_SCRATCH  (VMM_SCRATCH_BASE + PG_SZ) /* IPC scratch frame virtual address  */
 
 /**
  * vmm_pg_fault_handler - Handles page fault exceptions.
@@ -61,7 +65,7 @@ void vmm_demand_map(virt_addr_t vaddr, u32 flags);
 /**
  * vmm_init - Initializes the virtual memory manager. Maps the kernel 
  *            page directory. Pre-allocates page tables for the kernel heap
- *            and the scratch page. Registers the page fault handler.
+ *            and scratch frames. Registers the page fault handler.
  *
  * Context: The kernel heap page tables are pre-allocated to provide a consistent
  *          address space, since the kernel heap is shared among all tasks.

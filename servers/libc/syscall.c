@@ -1,41 +1,44 @@
 #include "config.h"
+#include "string.h"
 #include "syscall.h"
 
 static inline i32 syscall0(u32 no) {
     i32 ret;
-    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(no) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(no) : "memory");
     return ret;
 }
 
 static inline i32 syscall1(u32 no, u32 a1) {
     i32 ret;
-    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(no), "b"(a1) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(no), "b"(a1) : "memory");
     return ret;
 }
 
 static inline i32 syscall2(u32 no, u32 a1, u32 a2) {
     i32 ret;
-    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(no), "b"(a1), "c"(a2) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(no), "b"(a1), "c"(a2) : "memory");
     return ret;
 }
 
 static inline i32 syscall3(u32 no, u32 a1, u32 a2, u32 a3) {
     i32 ret;
-    __asm__ volatile ("int $0x80" : "=a"(ret) : "a"(no), "b"(a1), "c"(a2), "d"(a3) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(no), "b"(a1), "c"(a2), "d"(a3) : "memory");
     return ret;
 }
 
-static i32 sysop_call(sysop_no_t op, u32 arg0, u32 arg1, u32 arg2, u32 arg3) {
-    ipc_msg_t msg = {0};
-    sysop_msg_t req = {
+static i32 sysop_call(u32 op, u32 arg0, u32 arg1, u32 arg2, u32 arg3) {
+    sysop_msg_t req = (sysop_msg_t){
         .arg0 = arg0,
         .arg1 = arg1,
         .arg2 = arg2,
         .arg3 = arg3
     };
-
-    msg.id = (u32)op;
-    msg.sz = (u32)sizeof(sysop_msg_t);
+    
+    ipc_msg_t msg = (ipc_msg_t){
+        .id = op,
+        .sz = (u32)sizeof(sysop_msg_t)
+    };
+    
     __builtin_memcpy(msg.data, &req, sizeof(req));
     return syscall2(SYS_ipc_call, KERNEL_TASK_ID, (u32)&msg);
 }
@@ -69,10 +72,6 @@ void sys_thread_exit(i32 code) {
     __builtin_unreachable();
 }
 
-i32 sys_log_read(void* dst, u32 len, u32 off) {
-    return sysop_call(SYSOP_log_read, (u32)dst, len, off, 0);
-}
-
 i32 sys_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
     return syscall3(SYS_map_pg, (u32)vaddr, (u32)paddr, flags);
 }
@@ -81,13 +80,15 @@ i32 sys_unmap_pg(const void* vaddr) {
     return syscall1(SYS_unmap_pg, (u32)vaddr);
 }
 
-i32 sys_server_lookup(const char* name) {
-    u32 len = 0;
-    while (name[len] != '\0') {
-        len++;
-        if (len >= SERVER_MAX_NAME_LEN)
-            return -(i32)E_INVAL;
-    }
+i32 sys_log_read(void* dst, u32 len, u32 off) {
+    return sysop_call(SYSOP_log_read, (u32)dst, len, off, 0);
+}
 
-    return sysop_call(SYSOP_server_lookup, (u32)name, len + 1, 0, 0);
+i32 sys_server_lookup(const char* name) {
+    size_t len = strlen(name);
+
+    if (len >= SERVER_MAX_NAME_LEN)
+        return -(i32)E_INVAL;
+
+    return sysop_call(SYSOP_server_lookup, (u32)name, (u32)(len + 1), 0, 0);
 }

@@ -25,11 +25,11 @@ void klog_putc(const char c);
 void klog_puts(const char* str);
 
 /**
- * klog_write - Writes @str to the kernel log, up to @len bytes.
- * @str: The buffer to write.
+ * klog_write - Writes @buf to the kernel log, up to @len bytes.
+ * @buf: The buffer to write.
  * @len: The buffer length.
  */
-void klog_write(const char* str, const size_t len);
+void klog_write(const char* buf, const size_t len);
 
 /**
  * klog_clear - Clears the kernel log.

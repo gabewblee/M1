@@ -14,7 +14,6 @@
 #define PG_DIR               ((virt_addr_t)((PG_DIR_IDX << 22u) | (PG_DIR_IDX << 12u)))   /* Page directory virtual address   */
 #define PG_TABLE(pg_dir_idx) ((virt_addr_t)((PG_DIR_IDX << 22u) | ((pg_dir_idx) << 12u))) /* Page table virtual address       */
 #define HIGHER_HALF_IDX      ((u32)(HIGHER_HALF_OFFSET >> 22u))                           /* Page directory higher half index */
-#define SCRATCH              0xFEC00000u                                                  /* Scratch page virtual address     */
 
 typedef struct pg_dir_entry_t {
     u8          present   : 1;  /* Present flag                */
@@ -153,8 +152,8 @@ phys_addr_t vmm_create_aspace(void) {
     if (unlikely(!paddr))
         return 0;
 
-    vmm_map_pg(paddr, SCRATCH, PG_FLAG_RW);
-    pg_dir_t* new = (pg_dir_t*)SCRATCH;
+    vmm_map_pg(paddr, VMM_MMU_SCRATCH, PG_FLAG_RW);
+    pg_dir_t* new = (pg_dir_t*)VMM_MMU_SCRATCH;
     memset(new, 0, sizeof(pg_dir_t));
 
     const pg_dir_t* kernel_pg_dir = (const pg_dir_t*)swapper_pg_dir;
@@ -162,7 +161,7 @@ phys_addr_t vmm_create_aspace(void) {
         new->entries[pg_dir_idx] = kernel_pg_dir->entries[pg_dir_idx];
 
     set_pg_dir_entry(&new->entries[PG_DIR_IDX], paddr, PG_FLAG_RW);
-    vmm_unmap_pg(SCRATCH);
+    vmm_unmap_pg(VMM_MMU_SCRATCH);
     return paddr;
 }
 
@@ -170,17 +169,16 @@ void vmm_destroy_aspace(phys_addr_t cr3) {
     if (unlikely(!cr3))
         return;
 
-    vmm_map_pg(cr3, SCRATCH, PG_FLAG_RW);
-    pg_dir_t* kernel_pg_dir = (pg_dir_t*)SCRATCH;
+    vmm_map_pg(cr3, VMM_MMU_SCRATCH, PG_FLAG_RW);
+    pg_dir_t* kernel_pg_dir = (pg_dir_t*)VMM_MMU_SCRATCH;
     for (u32 pg_dir_idx = 0; pg_dir_idx < HIGHER_HALF_IDX; pg_dir_idx++) {
         if (!kernel_pg_dir->entries[pg_dir_idx].present)
             continue;
 
         phys_addr_t paddr = (phys_addr_t)kernel_pg_dir->entries[pg_dir_idx].paddr << 12;
-        vmm_unmap_pg(SCRATCH);
-        vmm_map_pg(paddr, SCRATCH, PG_FLAG_RW);
+        vmm_map_pg(paddr, VMM_MMU_SCRATCH, PG_FLAG_RW);
 
-        pg_table_t* pg_table = (pg_table_t*)SCRATCH;
+        pg_table_t* pg_table = (pg_table_t*)VMM_MMU_SCRATCH;
         for (u32 pg_table_idx = 0; pg_table_idx < 1024; pg_table_idx++) {
             if (!pg_table->entries[pg_table_idx].present)
                 continue;
@@ -188,13 +186,12 @@ void vmm_destroy_aspace(phys_addr_t cr3) {
             pmm_free_frm((phys_addr_t)pg_table->entries[pg_table_idx].paddr << 12);
         }
 
-        vmm_unmap_pg(SCRATCH);
         pmm_free_frm(paddr);
-        vmm_map_pg(cr3, SCRATCH, PG_FLAG_RW);
-        kernel_pg_dir = (pg_dir_t*)SCRATCH;
+        vmm_map_pg(cr3, VMM_MMU_SCRATCH, PG_FLAG_RW);
+        kernel_pg_dir = (pg_dir_t*)VMM_MMU_SCRATCH;
     }
 
-    vmm_unmap_pg(SCRATCH);
+    vmm_unmap_pg(VMM_MMU_SCRATCH);
     pmm_free_frm(cr3);
 }
 
@@ -202,11 +199,11 @@ void vmm_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
     u32 pg_dir_idx = get_pg_dir_idx(vaddr);
     pg_dir_entry_t* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
     if (!pg_dir_entry->present) {
-        phys_addr_t paddr = pmm_alloc_frm();
-        if (unlikely(!paddr))
+        phys_addr_t frm = pmm_alloc_frm();
+        if (unlikely(!frm))
             PANIC("Error: Failed to allocate frame");
 
-        set_pg_dir_entry(pg_dir_entry, paddr, flags);
+        set_pg_dir_entry(pg_dir_entry, frm, flags);
         flush_tlb_mapping(PG_TABLE(pg_dir_idx));
         memset(get_pg_table(pg_dir_idx), 0, sizeof(pg_table_t));
     }
@@ -244,10 +241,16 @@ void __init vmm_init(void) {
     size_t span = (1u << 22u);
     virt_addr_t start = ALIGN_DOWN_TO((virt_addr_t)skheap, span), end = ALIGN_UP_TO((virt_addr_t)ekheap, span);
     for (virt_addr_t vaddr = start; vaddr < end; vaddr += span)
-    alloc_pg_table(vaddr);
+        alloc_pg_table(vaddr);
 
-    alloc_pg_table(SCRATCH);
-    
+    alloc_pg_table(VMM_SCRATCH_BASE);
+
+    phys_addr_t ipc_scratch_frm = pmm_alloc_frm();
+    if (unlikely(!ipc_scratch_frm))
+        PANIC("Error: Failed to allocate frame");
+
+    vmm_map_pg(ipc_scratch_frm, VMM_IPC_SCRATCH, PG_FLAG_RW | PG_FLAG_GLOBAL);
+
     /* Register page fault handler */
     idt_register_handler(14, vmm_pg_fault_handler);
 }

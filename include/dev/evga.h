@@ -17,11 +17,11 @@ void __init evga_putc(const char c);
 void __init evga_puts(const char* str);
 
 /**
- * evga_write - Writes @str to the early VGA console, up to @len bytes.
- * @str: The buffer to write.
+ * evga_write - Writes @buf to the early VGA console, up to @len bytes.
+ * @buf: The buffer to write.
  * @len: The buffer length.
  */
-void __init evga_write(const char* str, const size_t len);
+void __init evga_write(const char* buf, const size_t len);
 
 /**
  * evga_clear - Clears the early VGA console.
