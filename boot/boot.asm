@@ -1,4 +1,3 @@
-; Multiboot constants
 MAGIC    equ 0x1BADB002
 MBALIGN  equ 1 << 0
 MEMINFO  equ 1 << 1
@@ -24,11 +23,11 @@ align 4
 
 global _start
 _start:
-    ; Save magic and multiboot information
+    ; Save multiboot information
     mov dword [__pa(magic)], eax
     mov dword [__pa(mbi)], ebx
 
-    ; Set up stack
+    ; Initialize stack
     mov esp, __pa(kernel_stack_top)
 
     ; Initialize swapper page directory
@@ -38,7 +37,7 @@ _start:
     mov eax, __pa(swapper_pg_dir)
     mov cr3, eax
 
-    ; Enable paging
+    ; Initialize paging
     mov eax, cr0
     or eax, 0x80000000
     mov cr0, eax
@@ -63,15 +62,15 @@ higher_half_kernel:
     mov eax, cr3
     mov cr3, eax
 
-    ; Set up stack
+    ; Initialize stack
     mov esp, kernel_stack_top
 
-    ; GDT setup
+    ; Initialize GDT
     lgdt [gdt_desc]
     jmp KERNEL_CODE_SEG_SEL:.reload
         
 .reload:
-    ; Reload segment registers
+    ; Reload segment selectors
     mov ax, KERNEL_DATA_SEG_SEL 
     mov ds, ax
     mov es, ax
@@ -79,11 +78,11 @@ higher_half_kernel:
     mov gs, ax
     mov ss, ax
 
-    ; Set up TSS
+    ; Initialize TSS
     mov dword [task_state_seg + 4], kernel_stack_top
     mov word [task_state_seg + 8], KERNEL_DATA_SEG_SEL
 
-    ; Set up TSS descriptor
+    ; Initialize TSS descriptor
     mov word [gdt_task_state_seg_desc + 0], task_state_seg_end - task_state_seg_start - 1
     mov eax, task_state_seg
     mov word [gdt_task_state_seg_desc + 2], ax

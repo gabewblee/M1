@@ -56,7 +56,7 @@ typedef u32 elf32_off_t;
 typedef i32 elf32_sword_t;
 typedef u32 elf32_word_t;
 
-typedef struct elf32_ehdr_t {
+typedef struct elf32_ehdr_s {
     u8           e_ident[EI_NIDENT]; /* ELF identification                */
     elf32_half_t e_type;             /* Object file type                  */
     elf32_half_t e_machine;          /* Required architecture             */
@@ -71,7 +71,7 @@ typedef struct elf32_ehdr_t {
     elf32_half_t e_shentsize;        /* Section header table entry size   */
     elf32_half_t e_shnum;            /* Section header table entry count  */
     elf32_half_t e_shstrndx;         /* Section header string table index */
-} elf32_ehdr_t;
+} elf32_ehdr_s;
 
 #define PT_NULL	   0 		  /* Unused program header 		 */
 #define PT_LOAD	   1 		  /* Loadable segment            */
@@ -87,13 +87,13 @@ typedef struct elf32_ehdr_t {
 #define PF_W       0x2        /* Writable segment            */
 #define PF_R       0x4        /* Readable segment            */
 
-typedef struct elf32_phdr_t {
-	elf32_word_t p_type;   /* Segment type 			   */
+typedef struct elf32_phdr_s {
+	elf32_word_t p_type;   /* Segment type 		       */
 	elf32_off_t  p_offset; /* Segment offset 		   */
 	elf32_addr_t p_vaddr;  /* Segment virtual address  */
 	elf32_addr_t p_paddr;  /* Segment physical address */
 	elf32_word_t p_filesz; /* Segment size on disk     */
 	elf32_word_t p_memsz;  /* Segment size in memory   */
 	elf32_word_t p_flags;  /* Segment flags 		   */
-	elf32_word_t p_align;  /* Segment alignment 	   */
-} elf32_phdr_t;
+	elf32_word_t p_align;  /* Segment alignment        */
+} elf32_phdr_s;

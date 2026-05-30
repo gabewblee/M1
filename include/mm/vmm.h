@@ -1,9 +1,8 @@
 #pragma once
 
 #include "config.h"
+#include "arch/x86/idt.h"
 #include "uapi/mm.h"
-
-typedef struct int_frm_t int_frm_t;
 
 #define VMM_SCRATCH_BASE 0xFEC00000u                /* Scratch page table virtual address */
 #define VMM_MMU_SCRATCH  VMM_SCRATCH_BASE           /* MMU scratch frame virtual address  */
@@ -17,7 +16,7 @@ typedef struct int_frm_t int_frm_t;
  * - Kernel heap demand mapping
  * - CPU exceptions
  */
-void vmm_pg_fault_handler(const int_frm_t* frm);
+void vmm_pg_fault_handler(const int_frm_s* frm);
 
 /**
  * vmm_set_pg_flags - Updates the mapping at @vaddr with @flags.

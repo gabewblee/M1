@@ -4,6 +4,7 @@
 #include "config.h"
 #include "dev/console.h"
 #include "kernel/ipc.h"
+#include "kernel/irq.h"
 #include "kernel/panic.h"
 #include "kernel/sched.h"
 #include "kernel/servers.h"
@@ -30,9 +31,10 @@ void __noreturn kmain(void) {
     sched_init();
     console_puts(ALL_FLAG, "[M1] Initialized scheduler\n");
 
+    irq_init();
+    console_puts(ALL_FLAG, "[M1] Initialized interrupts\n");
     irq_clear_mask(0);
     __asm__ volatile ("sti");
-    console_puts(ALL_FLAG, "[M1] Initialized interrupts\n");
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         PANIC("Error: Invalid multiboot magic number");
@@ -59,7 +61,7 @@ void __noreturn kmain(void) {
     thread0_init();
     console_puts(ALL_FLAG, "[M1] Initialized thread0\n");
 
-    servers_init();
+    servers_init(mbinfo);
     console_unregister_dev(EVGA_FLAG);
 
     pmm_free_init_section();

@@ -2,37 +2,37 @@
 #include "kernel/panic.h"
 #include "kernel/sched.h"
 #include "kernel/thread.h"
-#include "lib/list.h"
+#include "libk/list.h"
 
-static list_node_t run_queue[SCHED_PRIORITY_CNT];
-static list_node_t zombies;
+static list_node_s run_queue[SCHED_PRIORITY_CNT];
+static list_node_s zombies;
 static u32         bitmap;
 
-extern void thread_switch(thread_ctrl_blk_t* nxt);
+extern void thread_switch(thread_ctrl_blk_s* nxt);
 
-static inline void run_queue_add(thread_ctrl_blk_t* thread) {
+static inline void run_queue_add(thread_ctrl_blk_s* thread) {
     list_add_to_tail(&thread->run_link, &run_queue[thread->priority]);
     bitmap |= (1u << thread->priority);
 }
 
-static inline void run_queue_del(thread_ctrl_blk_t* thread) {
+static inline void run_queue_del(thread_ctrl_blk_s* thread) {
     list_del(&thread->run_link);
     if (list_is_empty(&run_queue[thread->priority]))
         bitmap &= ~(1u << thread->priority);
 }
 
 static void schedule(void) {
-    thread_ctrl_blk_t* cur = thread_self();
+    thread_ctrl_blk_s* cur = thread_self();
     if (bitmap == 0) {
         if (unlikely(cur->state != THREAD_STATE_RUNNING))
-            PANIC("Error: No runnable threads");
-            
+            PANIC("Error: Failed to schedule thread");
+
         return;
     }
 
-    u32 priority = __builtin_ctz(bitmap);
-    thread_ctrl_blk_t* nxt = list_first_entry(
-        &run_queue[priority], thread_ctrl_blk_t, run_link
+    const u32 priority = __builtin_ctz(bitmap);
+    thread_ctrl_blk_s* nxt = list_first_entry(
+        &run_queue[priority], thread_ctrl_blk_s, run_link
     );
 
     run_queue_del(nxt);
@@ -41,13 +41,13 @@ static void schedule(void) {
         thread_switch(nxt);
 }
 
-void sched_pit_handler(const int_frm_t* frm) {
+void sched_pit_handler(const int_frm_s* frm) {
     (void)frm;
     sched_tick();
 }
 
-void sched_ready(thread_ctrl_blk_t* thread) {
-    thread_ctrl_blk_t* cur = thread_self();
+void sched_ready(thread_ctrl_blk_s* thread) {
+    thread_ctrl_blk_s* cur = thread_self();
 
     thread->state = THREAD_STATE_READY;
     run_queue_add(thread);
@@ -58,21 +58,21 @@ void sched_ready(thread_ctrl_blk_t* thread) {
     }
 }
 
-void sched_block(list_node_t* wait_queue, thread_state_t state) {
-    thread_ctrl_blk_t* cur = thread_self();
+void sched_block(list_node_s* wait_queue, enum thread_state_e state) {
+    thread_ctrl_blk_s* cur = thread_self();
     cur->state             = state;
     list_add_to_tail(&cur->wait_link, wait_queue);
     schedule();
 }
 
-void sched_unblock(thread_ctrl_blk_t* thread) {
+void sched_unblock(thread_ctrl_blk_s* thread) {
     list_del(&thread->wait_link);
     sched_ready(thread);
 }
 
 void sched_yield(void) {
     ENTER_CRIT_SEC(flags);
-    thread_ctrl_blk_t* cur = thread_self();
+    thread_ctrl_blk_s* cur = thread_self();
     cur->state             = THREAD_STATE_READY;
     cur->quantum           = SCHED_QUANTUM;
     run_queue_add(cur);
@@ -81,10 +81,9 @@ void sched_yield(void) {
 }
 
 void sched_tick(void) {
-    thread_ctrl_blk_t* cur = thread_self();
-
     sched_reap();
 
+    thread_ctrl_blk_s* cur = thread_self();
     if (unlikely(cur->state != THREAD_STATE_RUNNING))
         return;
 
@@ -98,7 +97,7 @@ void sched_tick(void) {
 }
 
 void __noreturn sched_zombify(void) {
-    thread_ctrl_blk_t* cur = thread_self();
+    thread_ctrl_blk_s* cur = thread_self();
     cur->state             = THREAD_STATE_ZOMBIE;
     list_add_to_tail(&cur->run_link, &zombies);
     schedule();
@@ -107,8 +106,8 @@ void __noreturn sched_zombify(void) {
 
 void sched_reap(void) {
     while (!list_is_empty(&zombies)) {
-        thread_ctrl_blk_t* zombie = list_first_entry(
-            &zombies, thread_ctrl_blk_t, run_link
+        thread_ctrl_blk_s* zombie = list_first_entry(
+            &zombies, thread_ctrl_blk_s, run_link
         );
 
         list_del(&zombie->run_link);
@@ -124,5 +123,5 @@ void __init sched_init(void) {
     list_init(&zombies);
 
     /* Register PIT timer IRQ handler */
-    idt_register_handler(IRQ_TO_INT(0), sched_pit_handler);
+    idt_register_handler(IRQ_TO_VEC(0), sched_pit_handler);
 }

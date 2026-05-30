@@ -7,7 +7,7 @@ What is this?
 M1 is a microkernel operating system. It provides core mechanisms for address
 space isolation, inter-process communication, and scheduling. All other system
 services - drivers, filesystems, network stacks, etc - run as isolated 
-user-space servers that communicate through message passing.
+userspace servers that communicate through message passing.
 
 
 Requirements
@@ -48,13 +48,14 @@ To run it in QEMU:
 Project Layout
 --------------
 
-arch/   	Architecture-specific code
-boot/   	Kernel initialization code
-dev/    	In-kernel device drivers
-include/	Kernel headers
-iso/    	Bootloader configurations
-kernel/ 	Core microkernel services
-lib/    	Shared kernel code
-loader/ 	ELF loader
-mm/     	Memory management
-servers/	User-space servers
+arch/      Architecture-specific code
+boot/      Kernel initialization code
+dev/       In-kernel device drivers
+include/   Kernel headers
+iso/       Bootloader configurations
+kernel/    Core microkernel services
+libk/      Shared kernel code
+loader/    ELF loader
+mm/        Memory management
+uapi/      Shared kernel/user API
+userspace/ Userspace programs

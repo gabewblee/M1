@@ -1,16 +1,16 @@
 #include "config.h"
 #include "dev/evga.h"
-#include "io/io.h"
 #include "mm/page.h"
+#include "uapi/io.h"
 
-#define EVGA_COLS 80 /* EVGA number of columns */
-#define EVGA_ROWS 25 /* EVGA number of rows    */
+#define EVGA_COL_CNT 80 /* Early VGA column count */
+#define EVGA_ROW_CNT 25 /* Early VGA row count    */
 
 u8 evga_cur_row = 0;
 u8 evga_cur_col = 0;
 
 static void __init update_cursor(u8 row, u8 col) {
-    u16 pos = row * EVGA_COLS + col;
+    const u16 pos = row * EVGA_COL_CNT + col;
 	outb(0x3D4, 0x0F);
 	outb(0x3D5, (u8) (pos & 0xFF));
 	outb(0x3D4, 0x0E);
@@ -19,28 +19,28 @@ static void __init update_cursor(u8 row, u8 col) {
 
 static void __init scroll_up(u8 bcolor) {
     volatile u16* buf = (u16*)__va(EVGA_PHYS_ADDR);
-    u16 blank = (u16)bcolor << 8 | ' ';
-    const int penultimate_row = (EVGA_ROWS - 1) * EVGA_COLS;
+    const u16 blank = (u16)bcolor << 8 | ' ';
+    const int penultimate_row = (EVGA_ROW_CNT - 1) * EVGA_COL_CNT;
 
     for (int i = 0; i < penultimate_row; i++)
-        buf[i] = buf[i + EVGA_COLS];
+        buf[i] = buf[i + EVGA_COL_CNT];
 
-    for (int i = penultimate_row; i < penultimate_row + EVGA_COLS; i++)
+    for (int i = penultimate_row; i < penultimate_row + EVGA_COL_CNT; i++)
         buf[i] = blank;
 }
 
 static void __init newline(void) {
     evga_cur_row++;
     evga_cur_col = 0;
-    if (evga_cur_row >= EVGA_ROWS) {
-        scroll_up(EVGA_COLOR_BLACK);
-        evga_cur_row = EVGA_ROWS - 1;
+    if (evga_cur_row >= EVGA_ROW_CNT) {
+        scroll_up(EVGA_BLACK_COLOR);
+        evga_cur_row = EVGA_ROW_CNT - 1;
     }
     update_cursor(evga_cur_row, evga_cur_col);
 }
 
 static void __init tab(void) {
-    if (evga_cur_col + 4 >= EVGA_COLS) {
+    if (evga_cur_col + 4 >= EVGA_COL_CNT) {
         newline();
     } else {
         evga_cur_col += 4;
@@ -56,12 +56,12 @@ static void __init backspace(void) {
         evga_cur_col--;
     } else {
         evga_cur_row--;
-        evga_cur_col = EVGA_COLS - 1;
+        evga_cur_col = EVGA_COL_CNT - 1;
     }
 
     volatile u16* buf = (u16*)__va(EVGA_PHYS_ADDR);
-    u16 blank = (u16)' ' | ((u16)((EVGA_COLOR_BLACK << 4) | (EVGA_COLOR_WHITE & 0x0F)) << 8);
-    buf[evga_cur_row * EVGA_COLS + evga_cur_col] = blank;
+    const u16 blank = (u16)' ' | ((u16)((EVGA_BLACK_COLOR << 4) | (EVGA_WHITE_COLOR & 0x0F)) << 8);
+    buf[evga_cur_row * EVGA_COL_CNT + evga_cur_col] = blank;
     update_cursor(evga_cur_row, evga_cur_col);
 }
 
@@ -85,10 +85,10 @@ void __init evga_putc(const char c) {
     }
 
     volatile u16* buf = (u16*)__va(EVGA_PHYS_ADDR);
-    u16 cell = (u16)(u8)c | ((u16)((EVGA_COLOR_BLACK << 4) | (EVGA_COLOR_WHITE & 0x0F)) << 8);
-    buf[evga_cur_row * EVGA_COLS + evga_cur_col] = cell;
+    const u16 cell = (u16)(u8)c | ((u16)((EVGA_BLACK_COLOR << 4) | (EVGA_WHITE_COLOR & 0x0F)) << 8);
+    buf[evga_cur_row * EVGA_COL_CNT + evga_cur_col] = cell;
     evga_cur_col++;
-    if (evga_cur_col >= EVGA_COLS)
+    if (evga_cur_col >= EVGA_COL_CNT)
         newline();
 
     update_cursor(evga_cur_row, evga_cur_col);
@@ -105,9 +105,9 @@ void __init evga_write(const char* buf, const size_t len) {
 }
 
 void __init evga_clear(void) {
-    u8 color = EVGA_COLOR_BLACK;
+    const u8 color = EVGA_BLACK_COLOR;
     volatile u16* buf = (u16*)__va(EVGA_PHYS_ADDR);
-    for (int i = 0; i < EVGA_COLS * EVGA_ROWS; i++)
+    for (int i = 0; i < EVGA_COL_CNT * EVGA_ROW_CNT; i++)
         buf[i] = (u16)color << 8 | ' ';
         
     evga_cur_row = 0;

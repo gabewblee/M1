@@ -7,23 +7,23 @@
     X(klog, KLOG_FLAG) \
     X(evga, EVGA_FLAG)
 
-#define CONSOLE_DECL(name, flag) \
-    static console_t name = {    \
-        .flags = flag,           \
-        .putc  = name##_putc,    \
-        .puts  = name##_puts,    \
-        .write = name##_write,   \
-        .clear = name##_clear,   \
-        .init  = name##_init     \
+#define CONSOLE_DEF(name, flag)     \
+    static const console_s name = { \
+        .flags = flag,              \
+        .putc  = name##_putc,       \
+        .puts  = name##_puts,       \
+        .write = name##_write,      \
+        .clear = name##_clear,      \
+        .init  = name##_init        \
     };
 
-CONSOLES(CONSOLE_DECL)
-#undef CONSOLE_DECL
+CONSOLES(CONSOLE_DEF)
+#undef CONSOLE_DEF
 
-static console_t consoles[CONSOLE_MAX_CNT];
+static console_s consoles[CONSOLE_MAX_CNT];
 static size_t    cnt;
 
-void console_register_dev(console_t dev) {
+void console_register_dev(const console_s dev) {
     consoles[cnt++] = dev;
 }
 
@@ -37,26 +37,6 @@ void console_unregister_dev(u32 flags) {
         }
 
         i++;
-    }
-}
-
-void console_exec(u32 flags, console_op_t op, const void* arg, size_t len) {
-    switch (op) {
-        case CONSOLE_OP_PUTC:
-            console_putc(flags, *(const char*)arg);
-            break;
-        case CONSOLE_OP_PUTS:
-            console_puts(flags, (const char*)arg);
-            break;
-        case CONSOLE_OP_WRITE:
-            console_write(flags, (const char*)arg, len);
-            break;
-        case CONSOLE_OP_CLEAR:
-            console_clear(flags);
-            break;
-        case CONSOLE_OP_INIT:
-            console_init();
-            break;
     }
 }
 

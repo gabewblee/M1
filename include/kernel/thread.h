@@ -3,22 +3,23 @@
 #include <stddef.h>
 
 #include "config.h"
-#include "lib/list.h"
+#include "libk/list.h"
 
-typedef struct ipc_msg_t ipc_msg_t;
-typedef struct port_t port_t;
-typedef struct syscall_frm_t syscall_frm_t;
-typedef struct task_ctrl_blk_t task_ctrl_blk_t;
-typedef void   (*thread_entry_func_t)(void);
+typedef struct ipc_msg_s       ipc_msg_s;
+typedef struct port_s          port_s;
+typedef struct syscall_frm_s   syscall_frm_s;
+typedef struct task_ctrl_blk_s task_ctrl_blk_s;
 
-typedef enum thread_state_t {
+typedef void (*thread_entry_func_t)(void);
+
+enum thread_state_e {
     THREAD_STATE_RUNNING = 0, /* Thread is running */
     THREAD_STATE_READY   = 1, /* Thread is ready   */
     THREAD_STATE_BLOCKED = 2, /* Thread is blocked */
     THREAD_STATE_ZOMBIE  = 3  /* Thread is zombie  */
-} thread_state_t;
+};
 
-typedef struct thread_ctrl_blk_t {
+typedef struct thread_ctrl_blk_s {
     /* Context switch fields */
     virt_addr_t         esp0;         /* Ring 0 stack pointer            */
     virt_addr_t         esp;          /* Stack pointer                   */
@@ -30,40 +31,40 @@ typedef struct thread_ctrl_blk_t {
     thread_entry_func_t entry;        /* Thread entry point              */
 
     /* Task fields           */
-    task_ctrl_blk_t*    task;         /* Owning task                     */
-    list_node_t         task_link;    /* Link in owning task list        */
-    port_t*             reply_port;   /* Private reply port              */
-    const ipc_msg_t*    tx_msg;       /* Pending send message            */
-    ipc_msg_t*          rx_msg;       /* Pending receive buffer          */
+    task_ctrl_blk_s*    task;         /* Owning task                     */
+    list_node_s         task_link;    /* Link in owning task list        */
+    port_s*             reply_port;   /* Private reply port              */
+    const ipc_msg_s*    tx_msg;       /* Pending send message            */
+    ipc_msg_s*          rx_msg;       /* Pending receive buffer          */
     
     /* Scheduling fields     */
     u8                  priority;     /* Scheduling priority             */
     u8                  quantum;      /* Remaining time slice            */
-    thread_state_t      state;        /* Scheduler state                 */
-    list_node_t         run_link;     /* Link in run queue               */
-    list_node_t         wait_link;    /* Link in wait queue              */
+    enum thread_state_e state;        /* Scheduler state                 */
+    list_node_s         run_link;     /* Link in run queue               */
+    list_node_s         wait_link;    /* Link in wait queue              */
 
     /* Syscall fields        */
-    syscall_frm_t*      frm;          /* Current syscall frame           */
-} thread_ctrl_blk_t;
+    syscall_frm_s*      frm;          /* Current syscall frame           */
+} thread_ctrl_blk_s;
 
 /* Assembly offsets for context switching */
-_Static_assert(offsetof(thread_ctrl_blk_t, esp0) == 0, "Error: esp0 is not at offset 0");
-_Static_assert(offsetof(thread_ctrl_blk_t, esp) == 4, "Error: esp is not at offset 4");
-_Static_assert(offsetof(thread_ctrl_blk_t, cr3) == 8, "Error: cr3 is not at offset 8");
+_Static_assert(offsetof(thread_ctrl_blk_s, esp0) == 0, "Error: Invalid esp0 offset");
+_Static_assert(offsetof(thread_ctrl_blk_s, esp) == 4, "Error: Invalid esp offset");
+_Static_assert(offsetof(thread_ctrl_blk_s, cr3) == 8, "Error: Invalid cr3 offset");
 
 /**
- * thread_lookup - Retrieves the thread control block associated with @tid.
+ * thread_lookup - Looks up the thread control block associated with @tid.
  * @tid: The thread ID to lookup.
  * Returns: The matching thread control block, or NULL if @tid is out of range.
  */
-thread_ctrl_blk_t* thread_lookup(u32 tid);
+thread_ctrl_blk_s* thread_lookup(u32 tid);
 
 /**
- * thread_self - Retrieves the running thread's thread control block.
+ * thread_self - Returns the running thread's thread control block.
  * Returns: The running thread's thread control block.
  */
-thread_ctrl_blk_t* thread_self(void);
+thread_ctrl_blk_s* thread_self(void);
 
 /**
  * thread_exit - Terminates the running thread. Frees its ID and zombifies it.
@@ -82,7 +83,7 @@ void __noreturn thread_exit(void);
  * @priority: The thread's initial scheduling priority.
  * Returns: The new thread control block, or NULL on failure.
  */
-thread_ctrl_blk_t* kernel_thread_create(task_ctrl_blk_t* task, thread_entry_func_t entry, u8 priority) __attribute__((warn_unused_result));
+thread_ctrl_blk_s* kernel_thread_create(task_ctrl_blk_s* task, thread_entry_func_t entry, const u8 priority);
 
 /**
  * user_thread_create - Creates a new user thread in @task. Allocates its 
@@ -97,11 +98,11 @@ thread_ctrl_blk_t* kernel_thread_create(task_ctrl_blk_t* task, thread_entry_func
  * @priority: The thread's scheduling priority.
  * Returns: The new thread control block, or NULL on failure.
  */
-thread_ctrl_blk_t* user_thread_create(task_ctrl_blk_t* task,
+thread_ctrl_blk_s* user_thread_create(task_ctrl_blk_s* task,
                                       virt_addr_t      entry,
                                       virt_addr_t      user_stack_top,
                                       u32              eflags,
-                                      u8               priority);
+                                      const u8         priority);
 
 /**
  * thread_destroy - Destroys @thread. Detaches itself from its queues,
@@ -109,9 +110,10 @@ thread_ctrl_blk_t* user_thread_create(task_ctrl_blk_t* task,
  *                  port, its kernel stack, and its thread control block.
  * @thread: The thread to destroy.
  *
- * NOTE: The caller must ensure that @thread is not thread0.
+ * Preconditions:
+ * - @thread is not thread0.
  */
-void thread_destroy(thread_ctrl_blk_t* thread);
+void thread_destroy(thread_ctrl_blk_s* thread);
 
 /**
  * thread0_init - Initializes the threading subsystem. Promotes the current
@@ -119,6 +121,7 @@ void thread_destroy(thread_ctrl_blk_t* thread);
  *                kernel stack, task0's address space, handing it ID 0, and
  *                initializing its queues.
  *
- * NOTE: Thread0 is undestroyable.
+ * Preconditions:
+ * - The current execution context is thread0.
  */
 void __init thread0_init(void);

@@ -1,15 +1,17 @@
 #include "config.h"
 #include "dev/klog.h"
 #include "kernel/ipc.h"
+#include "kernel/irq.h"
 #include "kernel/sched.h"
 #include "kernel/servers.h"
 #include "kernel/syscall.h"
 #include "kernel/task.h"
 #include "kernel/thread.h"
-#include "lib/string.h"
+#include "libk/string.h"
 #include "mm/page.h"
 #include "mm/vmm.h"
 #include "uapi/ipc.h"
+#include "uapi/errno.h"
 #include "uapi/sysops.h"
 
 #define SYSCALLS(X)                        \
@@ -39,8 +41,8 @@ SYSCALLS(SYSCALL_FWD_DECL)
 #define SYSCALL_ARGS_3(frm) (frm)->ebx, (frm)->ecx, (frm)->edx
 #define SYSCALL_ARGS_4(frm) (frm)->ebx, (frm)->ecx, (frm)->edx, (frm)->esi
 
-static i32 sysop_exec(ipc_msg_t* msg) {
-    const sysop_msg_t* req = (const sysop_msg_t*)msg->data;
+static i32 sysop_exec(const ipc_msg_s* msg) {
+    const sysop_msg_s* req = (const sysop_msg_s*)msg->data;
     switch (msg->id) {
         case SYSOP_log_read: {
             u32 dst = req->arg0, len = req->arg1, off = req->arg2;
@@ -56,29 +58,33 @@ static i32 sysop_exec(ipc_msg_t* msg) {
             /* Returns task ID */
             return server_lookup(buf);
         }
+        case SYSOP_irq_register_handler:
+            return irq_register_handler((u8)req->arg0);
+        case SYSOP_irq_wait:
+            return irq_wait((u8)req->arg0);
         default:
             return -(i32)E_NOSYS;
     }
 }
 
 static i32 sys_ipc_send(u32 dst, u32 msg) {
-    return (dst == KERNEL_TASK_ID) ? sysop_exec((ipc_msg_t*)msg) : ipc_send(dst, (const ipc_msg_t*)msg);
+    return (dst == KERNEL_TASK_ID) ? sysop_exec((const ipc_msg_s*)msg) : ipc_send(dst, (const ipc_msg_s*)msg);
 }
 
 static i32 sys_ipc_recv(u32 msg) {
-    return ipc_recv((ipc_msg_t*)msg);
+    return ipc_recv((ipc_msg_s*)msg);
 }
 
 static i32 sys_ipc_call(u32 dst, u32 msg) {
-    return (dst == KERNEL_TASK_ID) ? sysop_exec((ipc_msg_t*)msg) : ipc_call(dst, (ipc_msg_t*)msg);
+    return (dst == KERNEL_TASK_ID) ? sysop_exec((const ipc_msg_s*)msg) : ipc_call(dst, (ipc_msg_s*)msg);
 }
 
 static i32 sys_ipc_reply(u32 client, u32 msg) {
-    return ipc_reply(client, (const ipc_msg_t*)msg);
+    return ipc_reply(client, (const ipc_msg_s*)msg);
 }
 
 static i32 sys_thread_create(u32 entry, u32 priority) {
-    thread_ctrl_blk_t* thread = kernel_thread_create(
+    thread_ctrl_blk_s* thread = kernel_thread_create(
         thread_self()->task, (thread_entry_func_t)entry, (u8)priority
     );
 
@@ -110,7 +116,7 @@ static i32 sys_max(void) {
     return -(i32)E_NOSYS;
 }
 
-i32 syscall_handler(syscall_frm_t* frm) {
+i32 syscall_handler(syscall_frm_s* frm) {
     static const void* const dispatch[SYS_max + 1] __aligned(64) = {
         #define SYSCALL_LBL(no, name, argc) [no] = &&l_##name,
         SYSCALLS(SYSCALL_LBL)
@@ -120,9 +126,9 @@ i32 syscall_handler(syscall_frm_t* frm) {
     /* Currently unused */
     thread_self()->frm = frm;
 
-    u32 syscall_no = frm->eax;
-    syscall_no = likely(syscall_no < SYS_max) ? syscall_no : SYS_max;
-    goto *dispatch[syscall_no];
+    u32 syscall = frm->eax;
+    syscall = likely(syscall < SYS_max) ? syscall : SYS_max;
+    goto *dispatch[syscall];
 
     #define SYSCALL(no, name, argc) \
     l_##name:                       \

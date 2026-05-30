@@ -1,13 +1,23 @@
 bits 32
 
-%define IDT_EXCEPTION_CNT 32
-%define IDT_IRQ_CNT       16
-%define IDT_STUB_STRIDE   15
+%define IDT_EXC_CNT     32
+%define IDT_IRQ_CNT     16
+%define IDT_STUB_STRIDE 15
 
 extern int_handler
 extern syscall_handler
 
-%macro isr_stub_no_err 1
+isr_handler_common:
+    pushad
+    cld
+    push esp
+    call int_handler
+    add esp, 4
+    popad
+    add esp, 8
+    iret
+
+%macro isr_no_err_stub 1
     push strict dword 0         ; 5 bytes
     push strict dword %1        ; 5 bytes
     jmp near isr_handler_common ; 5 bytes
@@ -25,14 +35,14 @@ extern syscall_handler
     %if %1 = 8 || %1 = 10 || %1 = 11 || %1 = 12 || %1 = 13 || %1 = 14 || %1 = 17 || %1 = 30
         isr_err_stub %1
     %else
-        isr_stub_no_err %1
+        isr_no_err_stub %1
     %endif
 %endmacro
 
 global isr_stub_base
 isr_stub_base:
 %assign vector 0
-%rep IDT_EXCEPTION_CNT + IDT_IRQ_CNT
+%rep IDT_EXC_CNT + IDT_IRQ_CNT
     isr_stub_for vector
     %assign vector vector + 1
 %endrep
@@ -57,14 +67,4 @@ syscall_stub:
     pop esi
     pop edi
     add esp, 4
-    iret
-
-isr_handler_common:
-    pushad
-    cld
-    push esp
-    call int_handler
-    add esp, 4
-    popad
-    add esp, 8
     iret

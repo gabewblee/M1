@@ -4,7 +4,8 @@
 #define SPAN_TO_SZ(x)       ((x) << 22u)                  /* Converts span count to size                   */
 #define SZ_TO_SPAN(x)       ((x) >> 22u)                  /* Converts size to span count                   */
 #define PG_TABLE_IDX(paddr) (PHYS_TO_PFN(paddr) & 0x3FFu) /* Converts physical address to page table index */
-#define PG_FLAGS            0x03u                         /* Present and writable flags                    */
+#define PG_RW_FLAG          0x02u                         /* Page is writable                              */
+#define PG_PRESENT_FLAG     0x01u                         /* Page is present                               */
 
 __aligned(PG_SZ)
 u32 swapper_pg_dir[1024];
@@ -17,15 +18,15 @@ void __multiboot setup_swapper_pg_dir(void) {
     if (pg_table_cnt == 0)
         for (;;) __asm__ volatile("hlt");
 
-    /* This works because ekernel is 4KiB aligned */
+    /* ekernel must be 4KiB aligned */
     phys_addr_t base = __pa(ekernel); u32* pg_table = (u32*)base;
     for (phys_addr_t paddr = 0; paddr < __pa(ekernel); paddr += PG_SZ)
-        pg_table[PG_TABLE_IDX(paddr)] = paddr | PG_FLAGS;
+        pg_table[PG_TABLE_IDX(paddr)] = paddr | PG_RW_FLAG | PG_PRESENT_FLAG;
 
     u32* pg_dir = (u32*)__pa(swapper_pg_dir); u32 offset = SZ_TO_SPAN(HIGHER_HALF_OFFSET);
     for (u32 i = 0; i < pg_table_cnt; i++) {
         phys_addr_t paddr = base + (phys_addr_t)i * PG_SZ;
-        pg_dir[i] = pg_dir[offset + i] = paddr | PG_FLAGS;
+        pg_dir[i] = pg_dir[offset + i] = paddr | PG_RW_FLAG | PG_PRESENT_FLAG;
     }
 
     *(u32*)__pa(&swapper_pg_table_cnt) = pg_table_cnt;

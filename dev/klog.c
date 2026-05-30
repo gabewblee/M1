@@ -3,16 +3,16 @@
 
 #define KLOG_BUF_MASK (KLOG_BUF_SZ - 1)
 
-_Static_assert((KLOG_BUF_SZ & KLOG_BUF_MASK) == 0, "Error: KLOG_BUF_SZ is not a power of 2");
+_Static_assert((KLOG_BUF_SZ & KLOG_BUF_MASK) == 0, "Error: Invalid KLOG_BUF_SZ");
 
-static char   buf[KLOG_BUF_SZ];
 static u32    head;
+static char   buf[KLOG_BUF_SZ];
 static size_t sz;
 
 size_t klog_read(char* dst, size_t len, size_t off) {
-    size_t available = sz - off;
-    size_t nbytes = (len < available) ? len : available;
-    u32 tail = (head + KLOG_BUF_SZ - (u32)sz) & KLOG_BUF_MASK;
+    const size_t available = sz - off;
+    const size_t nbytes = (len < available) ? len : available;
+    const u32 tail = (head + KLOG_BUF_SZ - (u32)sz) & KLOG_BUF_MASK;
     u32 idx = (tail + (u32)off) & KLOG_BUF_MASK;
     for (size_t i = 0; i < nbytes; i++) {
         dst[i] = buf[idx];

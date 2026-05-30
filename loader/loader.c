@@ -2,16 +2,16 @@
 #include <stddef.h>
 
 #include "bits.h"
-#include "compiler.h"
 #include "config.h"
 #include "elf.h"
-#include "lib/string.h"
+#include "libk/string.h"
 #include "loader/loader.h"
 #include "mm/page.h"
 #include "mm/vmm.h"
+#include "uapi/compiler.h"
 
-static i32 is_valid_ehdr(const elf32_ehdr_t* ehdr, size_t sz) {
-    if (unlikely(sz < sizeof(elf32_ehdr_t)))
+static i32 is_valid_ehdr(const elf32_ehdr_s* ehdr, size_t sz) {
+    if (unlikely(sz < sizeof(elf32_ehdr_s)))
         return -1;
 
     if (ehdr->e_ident[EI_MAG0] != ELFMAG0)
@@ -44,7 +44,7 @@ static i32 is_valid_ehdr(const elf32_ehdr_t* ehdr, size_t sz) {
     if (ehdr->e_machine != EM_386)
         return -1;
 
-    if (ehdr->e_phentsize != sizeof(elf32_phdr_t))
+    if (ehdr->e_phentsize != sizeof(elf32_phdr_s))
         return -1;
 
     if (ehdr->e_phnum == 0)
@@ -53,20 +53,14 @@ static i32 is_valid_ehdr(const elf32_ehdr_t* ehdr, size_t sz) {
     if (ehdr->e_entry == 0 || ehdr->e_entry >= HIGHER_HALF_OFFSET)
         return -1;
 
-    u64 end = (u64)ehdr->e_phoff + (u64)ehdr->e_phnum * sizeof(elf32_phdr_t);
+    const u64 end = (u64)ehdr->e_phoff + (u64)ehdr->e_phnum * sizeof(elf32_phdr_s);
     if (end > sz)
         return -1;
 
     return 0;
 }
 
-static i32 is_valid_load_seg(const elf32_phdr_t* phdr, size_t sz) {
-    if (phdr->p_memsz == 0)
-        return -1;
-
-    if (phdr->p_memsz < phdr->p_filesz)
-        return -1;
-
+static i32 is_valid_load_seg(const elf32_phdr_s* phdr, size_t sz) {
     if (phdr->p_vaddr == 0)
         return -1;
 
@@ -82,8 +76,8 @@ static i32 is_valid_load_seg(const elf32_phdr_t* phdr, size_t sz) {
     return 0;
 }
 
-static u32 pg_flags_at(const elf32_phdr_t* phdr, u16 phdr_cnt, virt_addr_t vaddr) {
-    u32 flags = PG_FLAG_USER;
+static u32 pg_flags_at(const elf32_phdr_s* phdr, const u16 phdr_cnt, virt_addr_t vaddr) {
+    u32 flags = PG_USER_FLAG;
     for (u16 i = 0; i < phdr_cnt; i++) {
         if (phdr[i].p_type != PT_LOAD)
             continue;
@@ -91,21 +85,18 @@ static u32 pg_flags_at(const elf32_phdr_t* phdr, u16 phdr_cnt, virt_addr_t vaddr
         virt_addr_t lo = ALIGN_DOWN_TO(phdr[i].p_vaddr, PG_SZ);
         virt_addr_t hi = ALIGN_UP_TO(phdr[i].p_vaddr + phdr[i].p_memsz, PG_SZ);
         if (vaddr >= lo && vaddr < hi && (phdr[i].p_flags & PF_W))
-            flags |= PG_FLAG_RW;
+            flags |= PG_RW_FLAG;
     }
     return flags;
 }
 
 virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
-    if (unlikely(!data))
-        return 0;
-
-    const elf32_ehdr_t* ehdr = (const elf32_ehdr_t*)data;
+    const elf32_ehdr_s* ehdr = (const elf32_ehdr_s*)data;
     if (unlikely(is_valid_ehdr(ehdr, sz) == -1))
         return 0;
 
-    const elf32_phdr_t* phdr = (const elf32_phdr_t*)((const u8*)data + ehdr->e_phoff);
-    u16 phdr_cnt = ehdr->e_phnum;
+    const elf32_phdr_s* phdr = (const elf32_phdr_s*)((const u8*)data + ehdr->e_phoff);
+    const u16 phdr_cnt = ehdr->e_phnum;
 
     virt_addr_t prev = 0; bool ok = false;
     for (u16 i = 0; i < phdr_cnt; i++) {
@@ -138,7 +129,7 @@ virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
             lo = cursor;
 
         for (virt_addr_t vaddr = lo; vaddr < hi; vaddr += PG_SZ)
-            vmm_demand_map(vaddr, PG_FLAG_USER | PG_FLAG_RW);
+            vmm_demand_map(vaddr, PG_USER_FLAG | PG_RW_FLAG);
 
         if (hi > cursor)
             cursor = hi;

@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 
-#include "compiler.h"
+#include "uapi/compiler.h"
 
 /**
  * evga_putc - Writes @c to the early VGA console.

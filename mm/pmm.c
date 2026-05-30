@@ -1,9 +1,9 @@
 #include <stdint.h>
 
 #include "bits.h"
-#include "boot/setup.h"
+#include "boot/multiboot.h"
 #include "config.h"
-#include "lib/string.h"
+#include "libk/string.h"
 #include "mm/page.h"
 #include "mm/pmm.h"
 
@@ -12,14 +12,14 @@
 static u32 bitmap[WORD_MAX_CNT];
 static u32 last;
 
-extern const u8 skernel[];
-extern const u8 ekernel[];
-extern const u8 sinit[];
-extern const u8 einit[];
-extern u32      swapper_pg_table_cnt;
+extern const u8  skernel[];
+extern const u8  ekernel[];
+extern const u8  sinit[];
+extern const u8  einit[];
+extern const u32 swapper_pg_table_cnt;
 
 static __always_inline void __hot bitmap_mark_bit(u32 bit) {
-    u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
+    const u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
     if (unlikely(bitmap[word] & mask))
         return;
 
@@ -27,7 +27,7 @@ static __always_inline void __hot bitmap_mark_bit(u32 bit) {
 }
 
 static __always_inline void __hot bitmap_unmark_bit(u32 bit) {
-    u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
+    const u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
     if (unlikely(!(bitmap[word] & mask)))
         return;
     
@@ -47,7 +47,7 @@ static void bitmap_unmark_range(phys_addr_t base, u32 len) {
 }
 
 static u32 find_unmarked_bit(u32 start, u32 end) {
-    u32 first = BIT_TO_WORD(start), last = BIT_TO_WORD(end + 31);
+    const u32 first = BIT_TO_WORD(start), last = BIT_TO_WORD(end + 31);
     for (u32 word = first; word < last; word++) {
         u32 mask = ~bitmap[word];
         if (word == first) {
@@ -145,7 +145,8 @@ void pmm_free_frms(phys_addr_t paddr, u32 cnt) {
 
 void __init pmm_init(const multiboot_info_t* mbinfo) {
     memset(bitmap, 0xFF, sizeof(bitmap));
-    uintptr_t cur = __va(mbinfo->mmap_addr), end = cur + mbinfo->mmap_length;
+    uintptr_t cur = __va(mbinfo->mmap_addr);
+    const uintptr_t end = cur + mbinfo->mmap_length;
     while (cur < end) {
         const multiboot_memory_map_t* mmap = (const multiboot_memory_map_t*)cur;
         if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE)
@@ -159,4 +160,28 @@ void __init pmm_init(const multiboot_info_t* mbinfo) {
 
     /* Reserve kernel and swapper page tables */
     bitmap_mark_range(__pa(skernel), (u32)(ekernel - skernel) + swapper_pg_table_cnt * PG_SZ);
+
+    /* Reserve multiboot metadata */
+    bitmap_mark_range(__pa(mbinfo), sizeof(multiboot_info_t));
+    if (mbinfo->flags & MULTIBOOT_INFO_CMDLINE)
+        bitmap_mark_range(mbinfo->cmdline, (u32)(strlen((const char*)__va(mbinfo->cmdline)) + 1));
+
+    if (mbinfo->flags & MULTIBOOT_INFO_BOOT_LOADER_NAME)
+        bitmap_mark_range(mbinfo->boot_loader_name, (u32)(strlen((const char*)__va(mbinfo->boot_loader_name)) + 1));
+
+    if (mbinfo->flags & MULTIBOOT_INFO_MEM_MAP)
+        bitmap_mark_range(mbinfo->mmap_addr, mbinfo->mmap_length);
+
+    /* Reserve multiboot modules */
+    if (mbinfo->flags & MULTIBOOT_INFO_MODS) {
+        bitmap_mark_range(mbinfo->mods_addr, mbinfo->mods_count * sizeof(multiboot_module_t));
+
+        const multiboot_module_t* mods = (const multiboot_module_t*)__va(mbinfo->mods_addr);
+        for (u32 i = 0; i < mbinfo->mods_count; i++) {
+            if (mods[i].cmdline)
+                bitmap_mark_range(mods[i].cmdline, (u32)(strlen((const char*)__va(mods[i].cmdline)) + 1));
+
+            bitmap_mark_range(mods[i].mod_start, mods[i].mod_end - mods[i].mod_start);
+        }
+    }
 }

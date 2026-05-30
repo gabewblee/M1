@@ -5,23 +5,23 @@
 #include "kernel/sched.h"
 #include "kernel/task.h"
 #include "kernel/thread.h"
-#include "lib/list.h"
-#include "lib/string.h"
+#include "libk/list.h"
+#include "libk/string.h"
 #include "mm/kheap.h"
 
-thread_ctrl_blk_t* running;
+thread_ctrl_blk_s* running;
 
-static thread_ctrl_blk_t* threads[THREAD_MAX_CNT];
+static thread_ctrl_blk_s* threads[THREAD_MAX_CNT];
 
-extern const u8   gdt_start[];
-extern const u8   gdt_kernel_code_seg_desc[];
-extern const u8   gdt_user_code_seg_desc[];
-extern const u8   gdt_user_data_seg_desc[];
-extern const u8   kernel_stack_top[];
-extern void kernel_thread_entry_trampoline(void);
-extern void user_thread_entry_trampoline(void);
+extern const u8 gdt_start[];
+extern const u8 gdt_kernel_code_seg_desc[];
+extern const u8 gdt_user_code_seg_desc[];
+extern const u8 gdt_user_data_seg_desc[];
+extern const u8 kernel_stack_top[];
+extern void     kernel_thread_entry_trampoline(void);
+extern void     user_thread_entry_trampoline(void);
 
-static inline i32 alloc_thread_id(thread_ctrl_blk_t* thread) {
+static inline i32 alloc_thread_id(thread_ctrl_blk_s* thread) {
     for (u32 tid = 1; tid < THREAD_MAX_CNT; tid++) {
         if (!threads[tid]) {
             threads[tid] = thread;
@@ -65,24 +65,24 @@ static u32* user_stack_init(u32* top, virt_addr_t entry, virt_addr_t uesp, u32 e
     return esp;
 }
 
-thread_ctrl_blk_t* thread_lookup(u32 tid) {
+thread_ctrl_blk_s* thread_lookup(u32 tid) {
     return (unlikely(tid >= THREAD_MAX_CNT)) ? NULL : threads[tid];
 }
 
-thread_ctrl_blk_t* thread_self(void) {
+thread_ctrl_blk_s* thread_self(void) {
     return running;
 }
 
 void __noreturn thread_exit(void) {
     __asm__ volatile ("cli");
-    const thread_ctrl_blk_t* cur = thread_self();
+    const thread_ctrl_blk_s* cur = thread_self();
     threads[cur->tid] = NULL;
     sched_zombify();
     __builtin_unreachable();
 }
 
-thread_ctrl_blk_t* kernel_thread_create(task_ctrl_blk_t* task, thread_entry_func_t entry, u8 priority) {
-    thread_ctrl_blk_t* thread = (thread_ctrl_blk_t*)kmalloc(sizeof(thread_ctrl_blk_t));
+thread_ctrl_blk_s* kernel_thread_create(task_ctrl_blk_s* task, thread_entry_func_t entry, const u8 priority) {
+    thread_ctrl_blk_s* thread = (thread_ctrl_blk_s*)kmalloc(sizeof(thread_ctrl_blk_s));
     if (unlikely(!thread))
         return NULL;
 
@@ -92,7 +92,7 @@ thread_ctrl_blk_t* kernel_thread_create(task_ctrl_blk_t* task, thread_entry_func
         return NULL;
     }
 
-    port_t* reply_port = port_create(1);
+    port_s* reply_port = port_create(1);
     if (unlikely(!reply_port)) {
         kfree(kernel_stack);
         kfree(thread);
@@ -100,7 +100,7 @@ thread_ctrl_blk_t* kernel_thread_create(task_ctrl_blk_t* task, thread_entry_func
     }
 
     u32* esp = kernel_stack_init((u32*)(kernel_stack + THREAD_KSTACK_SZ));
-    *thread = (thread_ctrl_blk_t) {
+    *thread = (thread_ctrl_blk_s) {
         .esp0         = (virt_addr_t)(kernel_stack + THREAD_KSTACK_SZ),
         .esp          = (virt_addr_t)esp,
         .cr3          = task->cr3,
@@ -135,12 +135,12 @@ thread_ctrl_blk_t* kernel_thread_create(task_ctrl_blk_t* task, thread_entry_func
     return thread;
 }
 
-thread_ctrl_blk_t* user_thread_create(task_ctrl_blk_t* task,
+thread_ctrl_blk_s* user_thread_create(task_ctrl_blk_s* task,
                                       virt_addr_t      entry,
                                       virt_addr_t      user_stack_top,
                                       u32              eflags,
-                                      u8               priority) {
-    thread_ctrl_blk_t* thread = (thread_ctrl_blk_t*)kmalloc(sizeof(thread_ctrl_blk_t));
+                                      const u8         priority) {
+    thread_ctrl_blk_s* thread = (thread_ctrl_blk_s*)kmalloc(sizeof(thread_ctrl_blk_s));
     if (unlikely(!thread))
         return NULL;
 
@@ -150,7 +150,7 @@ thread_ctrl_blk_t* user_thread_create(task_ctrl_blk_t* task,
         return NULL;
     }
 
-    port_t* reply_port = port_create(1);
+    port_s* reply_port = port_create(1);
     if (unlikely(!reply_port)) {
         kfree(kernel_stack);
         kfree(thread);
@@ -158,7 +158,7 @@ thread_ctrl_blk_t* user_thread_create(task_ctrl_blk_t* task,
     }
 
     u32* esp = user_stack_init((u32*)(kernel_stack + THREAD_KSTACK_SZ), entry, user_stack_top, eflags);
-    *thread = (thread_ctrl_blk_t) {
+    *thread = (thread_ctrl_blk_s) {
         .esp0         = (virt_addr_t)(kernel_stack + THREAD_KSTACK_SZ),
         .esp          = (virt_addr_t)esp,
         .cr3          = task->cr3,
@@ -193,7 +193,7 @@ thread_ctrl_blk_t* user_thread_create(task_ctrl_blk_t* task,
     return thread;
 }
 
-void thread_destroy(thread_ctrl_blk_t* thread) {
+void thread_destroy(thread_ctrl_blk_s* thread) {
     if (!unlikely(thread_lookup(thread->tid)))
         return;
 
@@ -216,16 +216,16 @@ void thread_destroy(thread_ctrl_blk_t* thread) {
 }
 
 void __init thread0_init(void) {
-    thread_ctrl_blk_t* thread0 = kmalloc(sizeof(thread_ctrl_blk_t));
+    thread_ctrl_blk_s* thread0 = kmalloc(sizeof(thread_ctrl_blk_s));
     if (unlikely(!thread0))
-        return;
+        PANIC("Error: Failed to initialize thread0");
 
     u32 esp;
     __asm__ volatile ("mov %%esp, %0" : "=r"(esp));
 
-    task_ctrl_blk_t* task0 = task_lookup(0);
+    task_ctrl_blk_s* task0 = task_lookup(0);
     
-    *thread0 = (thread_ctrl_blk_t) {
+    *thread0 = (thread_ctrl_blk_s) {
         .esp0     = (virt_addr_t)kernel_stack_top,
         .esp      = (virt_addr_t)esp,
         .cr3      = task0->cr3,
