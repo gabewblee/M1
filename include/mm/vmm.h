@@ -9,12 +9,8 @@
 #define VMM_IPC_SCRATCH  (VMM_SCRATCH_BASE + PG_SZ) /* IPC scratch frame virtual address  */
 
 /**
- * vmm_pg_fault_handler - Handles page fault exceptions.
+ * vmm_pg_fault_handler - Handles a page-fault exception.
  * @frm: The pointer to the interrupt stack frame.
- *
- * Supports:
- * - Kernel heap demand mapping
- * - CPU exceptions
  */
 void vmm_pg_fault_handler(const int_frm_s* frm);
 
@@ -33,10 +29,11 @@ void vmm_set_pg_flags(virt_addr_t vaddr, u32 flags);
 phys_addr_t vmm_create_aspace(void);
 
 /**
- * vmm_destroy_aspace - Destroys an address space. Frees lower-half page tables,
- *                      lower-half mapped frames, and page directory. Must not
- *                      be called on an active CR3.
+ * vmm_destroy_aspace - Destroys the address space @cr3.
  * @cr3: The physical address of the page directory to destroy.
+ * 
+ * Preconditions:
+ * - @cr3 must not be active.
  */
 void vmm_destroy_aspace(phys_addr_t cr3);
 
@@ -62,11 +59,6 @@ void vmm_unmap_pg(virt_addr_t vaddr);
 void vmm_demand_map(virt_addr_t vaddr, u32 flags);
 
 /**
- * vmm_init - Initializes the virtual memory manager. Maps the kernel 
- *            page directory. Pre-allocates page tables for the kernel heap
- *            and scratch frames. Registers the page fault handler.
- *
- * Context: The kernel heap page tables are pre-allocated to provide a consistent
- *          address space, since the kernel heap is shared among all tasks.
+ * vmm_init - Initializes the virtual memory manager (VMM).
  */
 void __init vmm_init(void);

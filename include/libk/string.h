@@ -23,7 +23,7 @@ void* memset(void* str, int c, size_t n);
 void* memcpy(void* dst, const void* src, size_t n);
 
 /**
- * strcmp - Compares two NUL-terminated strings.
+ * strcmp - Compares two NULL-terminated strings.
  * @a: The first string.
  * @b: The second string.
  * Returns: 0 if the strings are equal, a negative value

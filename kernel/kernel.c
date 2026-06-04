@@ -3,13 +3,15 @@
 #include "boot/multiboot.h"
 #include "config.h"
 #include "dev/console.h"
-#include "kernel/ipc.h"
-#include "kernel/irq.h"
-#include "kernel/panic.h"
-#include "kernel/sched.h"
-#include "kernel/servers.h"
-#include "kernel/task.h"
-#include "kernel/thread.h"
+#include "kernel/blk/ata.h"
+#include "kernel/blk/blk.h"
+#include "kernel/core/panic.h"
+#include "kernel/core/sched.h"
+#include "kernel/core/task.h"
+#include "kernel/core/thread.h"
+#include "kernel/ipc/ipc.h"
+#include "kernel/ipc/servers.h"
+#include "kernel/irq/irq.h"
 #include "mm/kheap.h"
 #include "mm/page.h"
 #include "mm/pmm.h"
@@ -63,6 +65,10 @@ void __noreturn kmain(void) {
 
     servers_init(mbinfo);
     console_unregister_dev(EVGA_FLAG);
+
+    blk_init();
+    ata_blk_init();
+    console_puts(ALL_FLAG, "[M1] Initialized block devices\n");
 
     pmm_free_init_section();
     for (;;) sched_yield();

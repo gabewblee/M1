@@ -13,8 +13,5 @@ typedef struct server_s {
  * run - Runs @server. Initializes the server, receives IPC messages,
  *       dispatches them, and replies to the sender.
  * @server: The server to run.
- *
- * Context: All servers must implement init(), dispatch(), and fini(),
- *          which this function calls in a uniform IPC loop.
  */
 void run(const server_s* server);

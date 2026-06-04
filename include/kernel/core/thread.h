@@ -12,12 +12,12 @@ typedef struct task_ctrl_blk_s task_ctrl_blk_s;
 
 typedef void (*thread_entry_func_t)(void);
 
-enum thread_state_e {
+typedef enum thread_state_e {
     THREAD_STATE_RUNNING = 0, /* Thread is running */
     THREAD_STATE_READY   = 1, /* Thread is ready   */
     THREAD_STATE_BLOCKED = 2, /* Thread is blocked */
     THREAD_STATE_ZOMBIE  = 3  /* Thread is zombie  */
-};
+} thread_state_e;
 
 typedef struct thread_ctrl_blk_s {
     /* Context switch fields */
@@ -40,7 +40,7 @@ typedef struct thread_ctrl_blk_s {
     /* Scheduling fields     */
     u8                  priority;     /* Scheduling priority             */
     u8                  quantum;      /* Remaining time slice            */
-    enum thread_state_e state;        /* Scheduler state                 */
+    thread_state_e      state;        /* Scheduler state                 */
     list_node_s         run_link;     /* Link in run queue               */
     list_node_s         wait_link;    /* Link in wait queue              */
 
@@ -50,13 +50,13 @@ typedef struct thread_ctrl_blk_s {
 
 /* Assembly offsets for context switching */
 _Static_assert(offsetof(thread_ctrl_blk_s, esp0) == 0, "Error: Invalid esp0 offset");
-_Static_assert(offsetof(thread_ctrl_blk_s, esp) == 4, "Error: Invalid esp offset");
-_Static_assert(offsetof(thread_ctrl_blk_s, cr3) == 8, "Error: Invalid cr3 offset");
+_Static_assert(offsetof(thread_ctrl_blk_s, esp) == 4,  "Error: Invalid esp offset");
+_Static_assert(offsetof(thread_ctrl_blk_s, cr3) == 8,  "Error: Invalid cr3 offset");
 
 /**
- * thread_lookup - Looks up the thread control block associated with @tid.
+ * thread_lookup - Looks up the thread control block by @tid.
  * @tid: The thread ID to lookup.
- * Returns: The matching thread control block, or NULL if @tid is out of range.
+ * Returns: The matching thread control block, or NULL on failure.
  */
 thread_ctrl_blk_s* thread_lookup(u32 tid);
 
@@ -67,17 +67,12 @@ thread_ctrl_blk_s* thread_lookup(u32 tid);
 thread_ctrl_blk_s* thread_self(void);
 
 /**
- * thread_exit - Terminates the running thread. Frees its ID and zombifies it.
- *               Never returns.
+ * thread_exit - Terminates the running thread.
  */
 void __noreturn thread_exit(void);
 
 /**
- * kernel_thread_create - Creates a new kernel thread in @task. Allocates its 
- *                        thread control block, its kernel stack, initializes
- *                        its queues, creates its private reply port, and hands
- *                        it a unique ID. Enqueues it into the run queue, possibly
- *                        preempting the caller if @priority outranks it.
+ * kernel_thread_create - Creates a new kernel thread in @task.
  * @task: The thread's owner task.
  * @entry: The thread's entry function.
  * @priority: The thread's initial scheduling priority.
@@ -86,11 +81,7 @@ void __noreturn thread_exit(void);
 thread_ctrl_blk_s* kernel_thread_create(task_ctrl_blk_s* task, thread_entry_func_t entry, const u8 priority);
 
 /**
- * user_thread_create - Creates a new user thread in @task. Allocates its 
- *                      thread control block, its kernel stack, initializes
- *                      its queues, creates its private reply port, and hands
- *                      it a unique ID. Enqueues it into the run queue, possibly
- *                      preempting the caller if @priority outranks it.
+ * user_thread_create - Creates a new user thread in @task.
  * @task: The thread's owner task.
  * @entry: The thread's entry point virtual address.
  * @user_stack_top: The thread's initial user-mode ESP.
@@ -105,9 +96,7 @@ thread_ctrl_blk_s* user_thread_create(task_ctrl_blk_s* task,
                                       const u8         priority);
 
 /**
- * thread_destroy - Destroys @thread. Detaches itself from its queues,
- *                  decrements the thread count in its task, frees its reply
- *                  port, its kernel stack, and its thread control block.
+ * thread_destroy - Destroys @thread. Releases its resources.
  * @thread: The thread to destroy.
  *
  * Preconditions:
@@ -116,10 +105,7 @@ thread_ctrl_blk_s* user_thread_create(task_ctrl_blk_s* task,
 void thread_destroy(thread_ctrl_blk_s* thread);
 
 /**
- * thread0_init - Initializes the threading subsystem. Promotes the current
- *                execution context as thread0 by assigning it the current 
- *                kernel stack, task0's address space, handing it ID 0, and
- *                initializing its queues.
+ * thread0_init - Initializes the threading subsystem.
  *
  * Preconditions:
  * - The current execution context is thread0.

@@ -41,12 +41,7 @@ phys_addr_t pmm_alloc_frms(u32 cnt);
 void pmm_free_frms(phys_addr_t paddr, u32 cnt);
 
 /**
- * pmm_init - Initializes the physical memory manager using the multiboot 
- *            memory map. Initially marks all frames as reserved, then
- *            unmarks the frames corresponding to available memory regions.
- *            Manually marks the null frame, the kernel image, the swapper
- *            page tables, the multiboot metadata, and the multiboot modules
- *            as reserved.
- * @mbinfo: The multiboot information structure provided by the bootloader.
+ * pmm_init - Initializes the physical memory manager (PMM).
+ * @mbinfo: The multiboot information structure.
  */
 void __init pmm_init(const multiboot_info_t* mbinfo);

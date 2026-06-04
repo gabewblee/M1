@@ -1,8 +1,8 @@
 #include <stddef.h>
 
-#include "kernel/ipc.h"
-#include "kernel/panic.h"
-#include "kernel/task.h"
+#include "kernel/ipc/ipc.h"
+#include "kernel/core/panic.h"
+#include "kernel/core/task.h"
 #include "libk/string.h"
 #include "mm/kheap.h"
 

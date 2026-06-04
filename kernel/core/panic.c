@@ -1,7 +1,7 @@
 #include "arch/x86/idt.h"
 #include "config.h"
 #include "dev/console.h"
-#include "kernel/panic.h"
+#include "kernel/core/panic.h"
 
 void __noreturn panic(const char *msg, const char *file, u32 line) {
     console_clear(ALL_FLAG);

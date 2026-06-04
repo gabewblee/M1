@@ -38,8 +38,8 @@ void pic_send_eoi(u8 irq);
 
 /**
  * pic_remap - Remaps PIC IRQ vectors to the given offsets. After remapping, 
- *             IRQs 0-7 map to @offset1 to @offset1 + 7 and IRQs 8-15 to 
- *             @offset2 to @offset2 + 7.
+ *             IRQs 0 through 7 map from @offset1, and IRQs 8 through 15 map
+ *             from @offset2.
  * @offset1: The vector offset for the master PIC.
  * @offset2: The vector offset for the slave PIC.
  */

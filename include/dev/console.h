@@ -25,9 +25,9 @@ typedef struct console_s {
 void console_register_dev(const console_s dev);
 
 /**
-* console_unregister_dev - Unregisters the consoles matching @flags.
-* @flags: The flags selecting the consoles to unregister.
-*/
+ * console_unregister_dev - Unregisters the consoles matching @flags.
+ * @flags: The flags selecting the consoles to unregister.
+ */
 void console_unregister_dev(u32 flags);
 
 /**

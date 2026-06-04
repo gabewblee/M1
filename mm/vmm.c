@@ -4,7 +4,7 @@
 #include "bits.h"
 #include "boot/setup.h"
 #include "config.h"
-#include "kernel/panic.h"
+#include "kernel/core/panic.h"
 #include "libk/string.h"
 #include "mm/page.h"
 #include "mm/pmm.h"

@@ -1,7 +1,7 @@
 #include "arch/x86/idt.h"
-#include "kernel/panic.h"
-#include "kernel/sched.h"
-#include "kernel/thread.h"
+#include "kernel/core/panic.h"
+#include "kernel/core/sched.h"
+#include "kernel/core/thread.h"
 #include "libk/list.h"
 
 static list_node_s run_queue[SCHED_PRIORITY_CNT];
@@ -58,7 +58,7 @@ void sched_ready(thread_ctrl_blk_s* thread) {
     }
 }
 
-void sched_block(list_node_s* wait_queue, enum thread_state_e state) {
+void sched_block(list_node_s* wait_queue, thread_state_e state) {
     thread_ctrl_blk_s* cur = thread_self();
     cur->state             = state;
     list_add_to_tail(&cur->wait_link, wait_queue);

@@ -20,8 +20,7 @@ i32 sys_ipc_recv(ipc_msg_s* out);
 
 /**
  * sys_ipc_call - Atomic ipc_send() and ipc_recv() operation. Sends @msg to
- *                task @dst's port and waits for a reply in @msg. Blocks the
- *                caller.
+ *                task @dst's port and waits for a reply in @msg. Blocks the caller.
  * @dst: The destination task ID.
  * @msg: The in-out message buffer.
  * Returns: E_OK on success, or a negative error code on failure.
@@ -85,7 +84,7 @@ i32 sys_unmap_pg(const void* vaddr);
 i32 sys_log_read(void* dst, u32 len, u32 off);
 
 /**
- * sys_server_lookup - Looks up the task ID associated with @name.
+ * sys_server_lookup - Looks up the task ID by @name.
  * @name: The NULL-terminated server name.
  * Returns: The task ID on success, or a negative error code on failure.
  */

@@ -26,14 +26,13 @@ typedef struct ipc_msg_ext_s {
 port_s* port_create(u32 capacity);
 
 /**
- * port_destroy - Destroys @port. Drops all queued messages, frees all
- *                queued messages, and frees @port.
+ * port_destroy - Destroys @port. Discards any queued messages.
  * @port: The port to destroy.
  */
 void port_destroy(port_s* port);
 
 /**
- * ipc_send - Sends @msg to task @dst's port. Does not block the caller.
+ * ipc_send - Sends @msg to task @dst's port. Blocks the caller.
  * @dst: The destination task ID.
  * @msg: The message to send.
  * Returns: E_OK on success, or a negative error code on failure.
@@ -41,8 +40,8 @@ void port_destroy(port_s* port);
 i32 ipc_send(u32 dst, const ipc_msg_s* msg);
 
 /**
- * ipc_recv - Receives a message into @out from the caller's port. Works
- *            in conjunction with ipc_send().
+ * ipc_recv - Receives a message into @out from the caller's port.
+ *            Works in conjunction with ipc_send().
  * @out: The output message buffer.
  * Returns: E_OK on success.
  */
@@ -68,6 +67,6 @@ i32 ipc_call(u32 dst, ipc_msg_s* msg);
 i32 ipc_reply(u32 client, const ipc_msg_s* msg);
 
 /**
- * ipc_init - Initializes IPC subsystem. Currently no-op.
+ * ipc_init - Initializes the inter-process communication (IPC) subsystem.
  */
 void __init ipc_init(void);

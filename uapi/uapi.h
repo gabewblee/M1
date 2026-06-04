@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ata.h"
 #include "compiler.h"
 #include "errno.h"
 #include "ipc.h"

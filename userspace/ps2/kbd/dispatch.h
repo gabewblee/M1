@@ -3,8 +3,8 @@
 #include "uapi/uapi.h"
 
 /**
- * init - Initializes the PS/2 keyboard server.
- * Returns: E_OK.
+ * init - Initializes PS/2 keyboard server.
+ * Returns: E_OK on success, or a negative error code on failure.
  */
 i32 init(void);
 
@@ -16,6 +16,6 @@ i32 init(void);
 i32 dispatch(ipc_msg_s* msg);
 
 /**
- * fini - Finalizes the PS/2 keyboard server. Currently no-op.
+ * fini - Finalizes PS/2 keyboard server. Currently a no-op.
  */
 void fini(void);

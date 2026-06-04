@@ -22,8 +22,5 @@ typedef struct syscall_frm_s {
  * syscall_handler - Handles system calls.
  * @frm: The pointer to the syscall stack frame.
  * Returns: E_OK on success, or a negative error code on failure.
- *
- * Context: The syscall handler is responsible for dispatching the
- *          system call to its appropriate handler.
  */
 i32 syscall_handler(syscall_frm_s* frm);

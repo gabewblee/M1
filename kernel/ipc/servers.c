@@ -2,11 +2,11 @@
 
 #include "bits.h"
 #include "boot/multiboot.h"
-#include "kernel/panic.h"
-#include "kernel/servers.h"
+#include "kernel/core/panic.h"
+#include "kernel/ipc/servers.h"
 #include "kernel/syscall.h"
-#include "kernel/task.h"
-#include "kernel/thread.h"
+#include "kernel/core/task.h"
+#include "kernel/core/thread.h"
 #include "libk/string.h"
 #include "loader/loader.h"
 #include "mm/page.h"
@@ -21,7 +21,8 @@
 /* X(name, priority, iopl) */
 #define SERVERS(X)    \
     X(vga, 1, 3)      \
-    X(keyboard, 1, 3)
+    X(keyboard, 1, 3) \
+    X(ata, 1, 3)
 
 typedef struct server_info_s {
     const char* name;     /* Server name         */

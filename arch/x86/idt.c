@@ -2,7 +2,7 @@
 
 #include "arch/x86/idt.h"
 #include "arch/x86/pic.h"
-#include "kernel/panic.h"
+#include "kernel/core/panic.h"
 
 #define ISR_STUB_SZ      15     /* ISR stub size    */
 #define IDT_VEC_FLAG     0xE    /* Vector gate flag */

@@ -14,7 +14,7 @@ typedef struct int_frm_s {
 typedef void (*int_handler_func_t)(const int_frm_s*);
 
 /**
- * idt_register_handler - Registers handler @handler for interrupt
+ * idt_register_handler - Registers the handler @handler for interrupt
  *                        vector @vec.
  * @vec: The interrupt vector.
  * @handler: The handler to register.
@@ -22,7 +22,7 @@ typedef void (*int_handler_func_t)(const int_frm_s*);
 void idt_register_handler(u8 vec, int_handler_func_t handler);
 
 /**
- * idt_unregister_handler - Unregisters handler for interrupt
+ * idt_unregister_handler - Unregisters the handler for interrupt
  *                          vector @vec.
  * @vec: The interrupt vector.
  */
@@ -36,8 +36,6 @@ void idt_unregister_handler(u8 vec);
 void int_handler(const int_frm_s* frm);
 
 /**
- * idt_init - Initializes the IDT. Registers the exception handlers,
- *            the IRQ handlers, and the syscall handler. Loads the IDT
- *            register.
+ * idt_init - Initializes the interrupt descriptor table (IDT).
  */
 void __init idt_init(void);
