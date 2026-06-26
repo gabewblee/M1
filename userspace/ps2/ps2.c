@@ -1,5 +1,5 @@
-#include "ps2.h"
-#include "uapi/io.h"
+#include <uapi/io.h>
+#include <userspace/ps2/ps2.h>
 
 #define PS2_DATA_PORT           0x60 /* PS/2 data port             */
 #define PS2_STATUS_PORT         0x64 /* PS/2 status port           */

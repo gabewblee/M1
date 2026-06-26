@@ -1,4 +1,4 @@
-#include "keymap2.h"
+#include <userspace/ps2/kbd/keymaps/keymap2.h>
 
 /* ASCII table size */
 #define MAP_SZ                  128u
@@ -30,10 +30,10 @@
 #define XREL                    TRANSITION(IDLE, EMIT | EXTENDED | RELEASE)
 
 /* Transition table */
-#define ROW(name, def, ...)       \
-    static const u8 name[256] = { \
-        [0 ... 255] = (def),      \
-        __VA_ARGS__               \
+#define ROW(name, def, ...)  \
+    static u8 name[256] = {  \
+        [0 ... 255] = (def), \
+        __VA_ARGS__          \
     }
 
 #define IGN8                                                    \
@@ -52,7 +52,7 @@ ROW(p3, TRANSITION(P2, 0));
 ROW(p2, TRANSITION(P1, 0));
 ROW(p1, NONE);
 
-static const u8* const table[] = {
+static u8* table[] = {
     [IDLE] = idle,
     [BRK]  = brk,
     [EXT]  = ext,
@@ -66,7 +66,7 @@ static const u8* const table[] = {
     [P1]   = p1
 };
 
-static const char keymap2_to_unshifted[MAP_SZ] = {
+static char keymap2_to_unshifted[MAP_SZ] = {
     [0x0D] = '\t', [0x0E] = '`',  [0x15] = 'q',
     [0x16] = '1',  [0x1A] = 'z',  [0x1B] = 's',
     [0x1C] = 'a',  [0x1D] = 'w',  [0x1E] = '2',
@@ -86,7 +86,7 @@ static const char keymap2_to_unshifted[MAP_SZ] = {
     [0x5B] = ']',  [0x5D] = '\\', [0x66] = '\b'
 };
 
-static const char keymap2_to_shifted[MAP_SZ] = {
+static char keymap2_to_shifted[MAP_SZ] = {
     [0x0D] = '\t', [0x0E] = '~',  [0x15] = 'Q',
     [0x16] = '!',  [0x1A] = 'Z',  [0x1B] = 'S',
     [0x1C] = 'A',  [0x1D] = 'W',  [0x1E] = '@',
@@ -109,7 +109,7 @@ static const char keymap2_to_shifted[MAP_SZ] = {
 bool decode2(u8 code, kbd_event_s* event) {
     static u8 state = IDLE;
 
-    const u8 nxt = table[state][code];
+    u8 nxt = table[state][code];
     state = nxt & 0x0F;
     if (!(nxt & EMIT))
         return false;

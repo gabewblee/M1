@@ -1,9 +1,7 @@
 #pragma once
 
-#include "uapi/ipc.h"
-#include "uapi/types.h"
-
-#define KBD_SERVER_NAME "keyboard"
+#include <ipc.h>
+#include <types.h>
 
 #define KBD_SERVER_OPS(X) \
     X(1, read)

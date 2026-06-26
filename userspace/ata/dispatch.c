@@ -1,14 +1,19 @@
-#include "driver.h"
-#include "dispatch.h"
-#include "pio/pio.h"
-#include "uapi/ata.h"
-
-#include "../libc/stdio.h"
-#include "../libc/string.h"
-#include "../libc/syscall.h"
+#include <uapi/ata.h>
+#include <userspace/ata/dispatch.h>
+#include <userspace/ata/driver.h>
+#include <userspace/ata/pio/pio.h>
+#include <userspace/libc/stdio.h>
+#include <userspace/libc/string.h>
+#include <userspace/libc/syscall.h>
 
 #define ATA_PRIMARY_BUS_IRQ   14 /* ATA primary bus IRQ number   */
 #define ATA_SECONDARY_BUS_IRQ 15 /* ATA secondary bus IRQ number */
+
+ATA_SERVER_OPS(SERVER_OP_DECL)
+
+const server_handler_f ata_handlers[SERVER_OP_MAX] = {
+    ATA_SERVER_OPS(SERVER_OP_ENTRY)
+};
 
 static char* print_drv_kind(u32 kind) {
     switch (kind) {
@@ -27,7 +32,7 @@ static char* print_drv_kind(u32 kind) {
     }
 }
 
-static void print_drv_info(u32 idx, const ata_drv_s* drv) {
+static void print_drv_info(u32 idx, ata_drv_s* drv) {
     printf("Drive %u:\n",               idx);
     printf("  Base I/O port: %x\n",     drv->channel->io);
     printf("  Base control port: %x\n", drv->channel->ctrl);
@@ -110,22 +115,6 @@ i32 init(void) {
             print_drv_info(idx, drv);
     }
     return E_OK;
-}
-
-i32 dispatch(ipc_msg_s* msg) {
-    switch ((enum ata_server_op_e)msg->id) {
-        case ATA_SERVER_OP_info:
-            return handle_info(msg);
-        case ATA_SERVER_OP_read:
-            return handle_read(msg);
-        case ATA_SERVER_OP_write:
-            return handle_write(msg);
-        default:
-            i32 ret = -(i32)E_NOSYS;
-            msg->sz = (u32)sizeof(i32);
-            memcpy(msg->data, &ret, sizeof(ret));
-            return ret;
-    }
 }
 
 void fini(void) {

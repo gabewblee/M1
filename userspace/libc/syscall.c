@@ -1,5 +1,5 @@
-#include "string.h"
-#include "syscall.h"
+#include <userspace/libc/string.h>
+#include <userspace/libc/syscall.h>
 
 static inline i32 syscall0(u32 no) {
     i32 ret;
@@ -25,36 +25,29 @@ static inline i32 syscall3(u32 no, u32 a1, u32 a2, u32 a3) {
     return ret;
 }
 
-static i32 sysop_call(u32 op, u32 arg0, u32 arg1, u32 arg2, u32 arg3) {
-    sysop_msg_s req = (sysop_msg_s){
-        .arg0 = arg0,
-        .arg1 = arg1,
-        .arg2 = arg2,
-        .arg3 = arg3
-    };
-    
-    ipc_msg_s msg = (ipc_msg_s){
-        .id = op,
-        .sz = (u32)sizeof(sysop_msg_s)
-    };
-    
-    __builtin_memcpy(msg.data, &req, sizeof(req));
-    return syscall2(SYS_ipc_call, KERNEL_TASK_ID, (u32)&msg);
+static inline i32 syscall5(u32 no, u32 a1, u32 a2, u32 a3, u32 a4, u32 a5) {
+    i32 ret;
+    __asm__ volatile("int $0x80"
+        : "=a"(ret)
+        : "a"(no), "b"(a1), "c"(a2), "d"(a3), "S"(a4), "D"(a5)
+        : "memory");
+    return ret;
 }
 
-i32 sys_ipc_send(u32 dst, const ipc_msg_s* msg) {
+
+i32 sys_ipc_send(u32 dst, ipc_msg_s* msg) {
     return syscall2(SYS_ipc_send, dst, (u32)msg);
 }
 
-i32 sys_ipc_recv(ipc_msg_s* out) {
-    return syscall1(SYS_ipc_recv, (u32)out);
+i32 sys_ipc_recv(ipc_msg_s* msg) {
+    return syscall1(SYS_ipc_recv, (u32)msg);
 }
 
 i32 sys_ipc_call(u32 dst, ipc_msg_s* msg) {
     return syscall2(SYS_ipc_call, dst, (u32)msg);
 }
 
-i32 sys_ipc_reply(u32 client, const ipc_msg_s* msg) {
+i32 sys_ipc_reply(u32 client, ipc_msg_s* msg) {
     return syscall2(SYS_ipc_reply, client, (u32)msg);
 }
 
@@ -75,27 +68,26 @@ i32 sys_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
     return syscall3(SYS_map_pg, (u32)vaddr, (u32)paddr, flags);
 }
 
-i32 sys_unmap_pg(const void* vaddr) {
+i32 sys_unmap_pg(void* vaddr) {
     return syscall1(SYS_unmap_pg, (u32)vaddr);
 }
 
 i32 sys_log_read(void* dst, u32 len, u32 off) {
-    return sysop_call(SYSOP_log_read, (u32)dst, len, off, 0);
+    return syscall3(SYS_log_read, (u32)dst, len, off);
 }
 
-i32 sys_server_lookup(const char* name) {
-    const size_t len = strlen(name);
-
-    if (len >= SERVER_MAX_NAME_LEN)
-        return -(i32)E_INVAL;
-
-    return sysop_call(SYSOP_server_lookup, (u32)name, (u32)(len + 1), 0, 0);
+i32 sys_server_lookup(u32 id) {
+    return syscall1(SYS_server_lookup, id);
 }
 
 i32 sys_irq_register_handler(u32 irq) {
-    return sysop_call(SYSOP_irq_register_handler, irq, 0, 0, 0);
+    return syscall1(SYS_irq_register_handler, irq);
 }
 
-i32 sys_irq_wait(u32 irq) {
-    return sysop_call(SYSOP_irq_wait, irq, 0, 0, 0);
+i32 sys_irq_wait_for(u32 irq) {
+    return syscall1(SYS_irq_wait_for, irq);
+}
+
+i32 sys_vm_copy(u32 id, void* dst, void* src, u32 len, u32 dir) {
+    return syscall5(SYS_vm_copy, id, (u32)dst, (u32)src, len, dir);
 }

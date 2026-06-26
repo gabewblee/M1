@@ -1,15 +1,17 @@
-#include "stdio.h"
-#include "string.h"
-#include "syscall.h"
-#include "uapi/vga.h"
+#include <uapi/errno.h>
+#include <uapi/servers.h>
+#include <uapi/vga.h>
+#include <userspace/libc/stdio.h>
+#include <userspace/libc/string.h>
+#include <userspace/libc/syscall.h>
 
 #define VGA_BUF_SZ (sizeof(((vga_server_req_s*)0)->buf))
 
 static i32 vga_task_id = -(i32)E_INVAL;
 
-static i32 call_vga_server(enum vga_server_op_e op, const vga_server_req_s* req) {
+static i32 call_vga_server(enum vga_server_op_e op, vga_server_req_s* req) {
     if (vga_task_id < 0)
-        vga_task_id = sys_server_lookup(VGA_SERVER_NAME);
+        vga_task_id = sys_server_lookup(SERVER_ID_vga);
 
     ipc_msg_s msg = (ipc_msg_s) {
         .id = (u32)op,
@@ -33,7 +35,7 @@ static i32 print_unsigned_int(u32 val, u32 base, i32 uppercase) {
         return putc('0');
 
     while (val > 0) {
-        const u32 digit = val % base;
+        u32 digit = val % base;
         val /= base;
         buf[n++] = (char)(digit < 10 ? '0' + digit : (uppercase ? 'A' : 'a') + digit - 10);
     }
@@ -62,7 +64,7 @@ static i32 print_signed_int(i32 val) {
     return print_unsigned_int((u32)val, 10, 0);
 }
 
-static i32 vprintf(const char* fmt, va_list ap) {
+static i32 vprintf(char* fmt, va_list ap) {
     i32 cnt = 0;
     while (*fmt != '\0') {
         if (*fmt != '%') {
@@ -83,7 +85,7 @@ static i32 vprintf(const char* fmt, va_list ap) {
                 cnt++;
                 break;
             case 's': {
-                const char* str = va_arg(ap, const char*);
+                char* str = va_arg(ap, char*);
                 if (!str)
                     str = "(null)";
                 
@@ -143,7 +145,7 @@ i32 putc(int c) {
     return call_vga_server(VGA_SERVER_OP_putc, &req);
 }
 
-i32 puts(const char* str) {
+i32 puts(char* str) {
     i32 ret = write(str, strlen(str));
     if (ret < 0)
         return ret;
@@ -154,7 +156,7 @@ i32 puts(const char* str) {
     return ret + 1;
 }
 
-i32 write(const char* buf, size_t len) {
+i32 write(char* buf, size_t len) {
     size_t total = 0;
     while (total < len) {
         size_t chunk = len - total;
@@ -175,7 +177,7 @@ i32 write(const char* buf, size_t len) {
     return (i32)total;
 }
 
-i32 printf(const char* fmt, ...) {
+i32 printf(char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     i32 ret = vprintf(fmt, ap);

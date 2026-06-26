@@ -1,175 +1,195 @@
+#include <kernel/core/sched.h>
+#include <kernel/core/task.h>
+#include <kernel/core/thread.h>
+#include <kernel/ipc/ipc.h>
+#include <kernel/syscall.h>
+#include <kernel/uaccess.h>
+#include <libk/list.h>
+#include <libk/string.h>
+#include <mm/kheap.h>
+#include <mm/page.h>
+#include <mm/vmm.h>
 #include <stddef.h>
+#include <uapi/uapi.h>
 
-#include "config.h"
-#include "kernel/ipc/ipc.h"
-#include "kernel/core/sched.h"
-#include "kernel/syscall.h"
-#include "kernel/core/task.h"
-#include "kernel/core/thread.h"
-#include "kernel/uaccess.h"
-#include "libk/list.h"
-#include "libk/string.h"
-#include "mm/kheap.h"
-#include "mm/page.h"
-#include "mm/vmm.h"
-#include "uapi/uapi.h"
-
-static void deliver(thread_ctrl_blk_s* recv, const ipc_msg_s* msg, u32 sender) {
+static i32 deliver(thread_ctrl_blk_s* recv, ipc_msg_s* msg, u32 sender) {
     u8 kbuf[IPC_MSG_SZ];
-    const thread_ctrl_blk_s* cur = thread_self();
+    thread_ctrl_blk_s* cur = thread_self();
 
-    /* This function call might be unnecessary */
-    copy_from_user(cur->cr3, kbuf, msg, IPC_MSG_SZ);
+    i32 ret = copy_from_user(cur->cr3, kbuf, msg, IPC_MSG_SZ);
+    if (unlikely(ret != E_OK))
+        return ret;
+
     ((ipc_msg_s*)kbuf)->sender = sender;
 
-    copy_to_user(recv->cr3, recv->rx_msg, kbuf, IPC_MSG_SZ);
+    ret = copy_to_user(recv->cr3, recv->rx_msg, kbuf, IPC_MSG_SZ);
+    if (unlikely(ret != E_OK))
+        return ret;
+
     recv->rx_msg = NULL;
-}
-
-static i32 __hot port_send(port_s* port, const ipc_msg_s* msg, u32 sender) {
-    ENTER_CRIT_SEC(flags1);
-    /* If there are blocked receivers, deliver the message directly to them */
-    if (!list_is_empty(&port->receivers)) {
-        thread_ctrl_blk_s* recv = list_first_entry(
-            &port->receivers, thread_ctrl_blk_s, wait_link
-        );
-
-        deliver(recv, msg, sender);
-        EXIT_CRIT_SEC(flags1);
-        sched_unblock(recv);
-        return E_OK;
-    }
-
-    /* If the port has space, enqueue the message in the port's message queue */
-    if (port->cnt < port->cap) {
-        ipc_msg_ext_s* slot = (ipc_msg_ext_s*)kmalloc(sizeof(ipc_msg_ext_s));
-        if (unlikely(!slot)) {
-            EXIT_CRIT_SEC(flags1);
-            return -(i32)E_NOMEM;
-        }
-
-        copy_from_user(thread_self()->cr3, &slot->msg, msg, IPC_MSG_SZ);
-        slot->msg.sender = sender;
-
-        list_init(&slot->link);
-        list_add_to_tail(&slot->link, &port->msgs);
-        port->cnt++;
-
-        EXIT_CRIT_SEC(flags1);
-        return E_OK;
-    }
-
-    /* If the port is full, block the sender */
-    thread_ctrl_blk_s* cur = thread_self();
-    cur->tx_msg            = msg;
-
-    EXIT_CRIT_SEC(flags1);
-    sched_block(&port->senders, THREAD_STATE_BLOCKED);
-
-    ENTER_CRIT_SEC(flags2);
-    cur->tx_msg = NULL;
-    EXIT_CRIT_SEC(flags2);
     return E_OK;
 }
 
-static i32 __hot port_recv(port_s* port, ipc_msg_s* out) {
-    ENTER_CRIT_SEC(flags1);
-    /* If there are enqueued msgs, deliver the message directly to the caller */
-    if (!list_is_empty(&port->msgs)) {
-        ipc_msg_ext_s* slot = list_first_entry(&port->msgs, ipc_msg_ext_s, link);
+static i32 __hot port_send(port_s* port, ipc_msg_s* msg, u32 sender) {
+    thread_ctrl_blk_s* unblock = NULL;
+    bool block = false;
+    i32 ret = E_OK;
 
-        list_del(&slot->link);
-        port->cnt--;
+    {
+        spin_guard(&port->lock);
 
-        copy_to_user(thread_self()->cr3, out, &slot->msg, IPC_MSG_SZ);
-        if (!list_is_empty(&port->senders)) {
-            /* Reuse previously allocated message slot */
-            thread_ctrl_blk_s* sender = list_first_entry(
-                &port->senders, thread_ctrl_blk_s, wait_link
+        /* Case 1: Deliver message to blocked receiver */
+        if (!list_is_empty(&port->recvs)) {
+            unblock = list_first_entry(&port->recvs, thread_ctrl_blk_s, wait_link);
+            ret = deliver(unblock, msg, sender);
+            if (unlikely(ret != E_OK))
+                unblock = NULL;
+
+        /* Case 2: Enqueue message in port's message queue */
+        } else if (port->cnt < port->cap) {
+            kipc_msg_s* slot = (kipc_msg_s*)kmalloc(sizeof(kipc_msg_s));
+            if (unlikely(!slot)) {
+                ret = -(i32)E_NOMEM;
+            } else {
+                ret = copy_from_user(thread_self()->cr3, &slot->msg, msg, IPC_MSG_SZ);
+                if (unlikely(ret != E_OK)) {
+                    kfree(slot);
+                } else {
+                    slot->msg.sender = sender;
+                    list_init(&slot->link);
+                    list_add_to_tail(&slot->link, &port->msgs);
+                    port->cnt++;
+                }
+            }
+
+        /* Case 3: Block the sender */
+        } else {
+            thread_self()->tx_msg = msg;
+            block = true;
+        }
+    }
+
+    if (unblock)
+        sched_unblock(unblock);
+
+    if (block) {
+        sched_block(&port->sndrs, THREAD_STATE_BLOCKED);
+        spin_guard(&port->lock);
+        thread_self()->tx_msg = NULL;
+    }
+
+    return ret;
+}
+
+static i32 __hot port_recv(port_s* port, ipc_msg_s* msg) {
+    thread_ctrl_blk_s* unblock = NULL;
+    kipc_msg_s* free = NULL;
+    bool block = false;
+    i32 ret = E_OK;
+
+    {
+        spin_guard(&port->lock);
+
+        /* Case 1: Deliver the message to caller */
+        if (!list_is_empty(&port->msgs)) {
+            kipc_msg_s* slot = list_first_entry(&port->msgs, kipc_msg_s, link);
+            list_del(&slot->link);
+            port->cnt--;
+
+            ret = copy_to_user(thread_self()->cr3, msg, &slot->msg, IPC_MSG_SZ);
+            if (unlikely(ret != E_OK)) {
+                free = slot;
+            } else if (!list_is_empty(&port->sndrs)) {
+                /* Reuse previously allocated message slot */
+                thread_ctrl_blk_s* sndr = list_first_entry(
+                    &port->sndrs, thread_ctrl_blk_s, wait_link
+                );
+                
+                i32 sret = copy_from_user(sndr->cr3, &slot->msg, sndr->tx_msg, IPC_MSG_SZ);
+                sndr->tx_msg = NULL;
+                unblock   = sndr;
+                if (unlikely(sret != E_OK)) {
+                    free = slot;
+                } else {
+                    slot->msg.sender = sndr->id;
+                    list_init(&slot->link);
+                    list_add_to_tail(&slot->link, &port->msgs);
+                    port->cnt++;
+                }
+            } else {
+                free = slot;
+            }
+
+        /* Case 2: Retrieve message from sender */
+        } else if (!list_is_empty(&port->sndrs)) {
+            thread_ctrl_blk_s* sndr = list_first_entry(
+                &port->sndrs, thread_ctrl_blk_s, wait_link
             );
-
-            copy_from_user(sender->cr3, &slot->msg, sender->tx_msg, IPC_MSG_SZ);
-            slot->msg.sender = sender->tid;
-
-            list_init(&slot->link);
-            list_add_to_tail(&slot->link, &port->msgs);
-            port->cnt++;
-
-            sender->tx_msg = NULL;
-            EXIT_CRIT_SEC(flags1);
-            sched_unblock(sender);
-            return E_OK;
-        }
-
-        kfree(slot);
-        EXIT_CRIT_SEC(flags1);
-        return E_OK;
-    }
-
-    /* If there are blocked senders, retrieve message directly from sender */
-    if (!list_is_empty(&port->senders)) {
-        thread_ctrl_blk_s* sender = list_first_entry(
-            &port->senders, thread_ctrl_blk_s, wait_link
-        );
-
-        {
             u8 buf[IPC_MSG_SZ];
-            copy_from_user(sender->cr3, buf, sender->tx_msg, IPC_MSG_SZ);
-            ((ipc_msg_s*)buf)->sender = sender->tid;
-            copy_to_user(thread_self()->cr3, out, buf, IPC_MSG_SZ);
-        }
-        sender->tx_msg = NULL;
+            ret = copy_from_user(sndr->cr3, buf, sndr->tx_msg, IPC_MSG_SZ);
+            if (likely(ret == E_OK)) {
+                ((ipc_msg_s*)buf)->sender = sndr->id;
+                ret = copy_to_user(thread_self()->cr3, msg, buf, IPC_MSG_SZ);
+            }
+            sndr->tx_msg = NULL;
+            unblock   = sndr;
 
-        EXIT_CRIT_SEC(flags1);
-        sched_unblock(sender);
-        return E_OK;
+        /* Case 3: Block the receiver */
+        } else {
+            thread_self()->rx_msg = msg;
+            block = true;
+        }
     }
 
-    /* Block the receiver until a message is available */
-    thread_ctrl_blk_s* cur = thread_self();
-    cur->rx_msg            = out;
+    if (free)
+        kfree(free);
 
-    EXIT_CRIT_SEC(flags1);
-    sched_block(&port->receivers, THREAD_STATE_BLOCKED);
+    if (unblock)
+        sched_unblock(unblock);
 
-    ENTER_CRIT_SEC(flags2);
-    cur->rx_msg = NULL;
-    EXIT_CRIT_SEC(flags2);
-    return E_OK;
+    if (block) {
+        sched_block(&port->recvs, THREAD_STATE_BLOCKED);
+        spin_guard(&port->lock);
+        thread_self()->rx_msg = NULL;
+    }
+
+    return ret;
 }
 
-port_s* port_create(u32 capacity) {
+port_s* port_create(u32 cap) {
     port_s* port = (port_s*)kmalloc(sizeof(port_s));
     if (unlikely(!port))
         return NULL;
 
+    spinlock_init(&port->lock);
     list_init(&port->msgs);
-    list_init(&port->receivers);
-    list_init(&port->senders);
+    list_init(&port->recvs);
+    list_init(&port->sndrs);
 
-    port->cnt = 0; port->cap = capacity;
+    port->cnt = 0;
+    port->cap = cap;
     return port;
 }
 
 void port_destroy(port_s* port) {
     while (!list_is_empty(&port->msgs)) {
-        ipc_msg_ext_s* slot = list_first_entry(&port->msgs, ipc_msg_ext_s, link);
+        kipc_msg_s* slot = list_first_entry(&port->msgs, kipc_msg_s, link);
         list_del(&slot->link);
         kfree(slot);
     }
     kfree(port);
 }
 
-i32 ipc_send(u32 dst, const ipc_msg_s* msg) {
+i32 ipc_send(u32 dst, ipc_msg_s* msg) {
     task_ctrl_blk_s* task = task_lookup(dst);
     if (unlikely(!task))
         return -(i32)E_INVAL;
 
-    return port_send(task->port, msg, thread_self()->tid);
+    return port_send(task->port, msg, thread_self()->id);
 }
 
-i32 ipc_recv(ipc_msg_s* out) {
-    return port_recv(thread_self()->task->port, out);
+i32 ipc_recv(ipc_msg_s* msg) {
+    return port_recv(thread_self()->task->port, msg);
 }
 
 i32 ipc_call(u32 dst, ipc_msg_s* msg) {
@@ -181,19 +201,19 @@ i32 ipc_call(u32 dst, ipc_msg_s* msg) {
     if (unlikely(!cur->reply_port))
         return -(i32)E_PERM;
 
-    i32 ret = port_send(task->port, msg, cur->tid);
+    i32 ret = port_send(task->port, msg, cur->id);
     if (unlikely(ret != E_OK))
         return ret;
 
     return port_recv(cur->reply_port, msg);
 }
 
-i32 ipc_reply(u32 client, const ipc_msg_s* msg) {
-    thread_ctrl_blk_s* thread = thread_lookup(client);
+i32 ipc_reply(u32 dst, ipc_msg_s* msg) {
+    thread_ctrl_blk_s* thread = thread_lookup(dst);
     if (unlikely(!thread || !thread->reply_port))
         return -(i32)E_INVAL;
 
-    return port_send(thread->reply_port, msg, thread_self()->tid);
+    return port_send(thread->reply_port, msg, thread_self()->id);
 }
 
 void __init ipc_init(void) {

@@ -1,14 +1,17 @@
+#include <arch/x86/idt.h>
+#include <bits.h>
+#include <boot/setup.h>
+#include <config.h>
+#include <kernel/core/panic.h>
+#include <kernel/sync/spinlock.h>
+#include <libk/string.h>
+#include <mm/page.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
+#include <stdbool.h>
 #include <stddef.h>
 
-#include "arch/x86/idt.h"
-#include "bits.h"
-#include "boot/setup.h"
-#include "config.h"
-#include "kernel/core/panic.h"
-#include "libk/string.h"
-#include "mm/page.h"
-#include "mm/pmm.h"
-#include "mm/vmm.h"
+spinlock_s vmm_scratch_lk;
 
 #define PG_DIR_IDX           1023u                                                        /* Page directory index             */
 #define PG_DIR               ((virt_addr_t)((PG_DIR_IDX << 22u) | (PG_DIR_IDX << 12u)))   /* Page directory virtual address   */
@@ -43,16 +46,16 @@ typedef struct pg_table_entry_s {
 } __packed pg_table_entry_s;
 
 typedef struct pg_dir_s {
-    pg_dir_entry_s entries[1024];
+    pg_dir_entry_s entries[PG_ENTRY_CNT];
 } __aligned(PG_SZ) pg_dir_s;
 
 typedef struct pg_table_s {
-    pg_table_entry_s entries[1024];
+    pg_table_entry_s entries[PG_ENTRY_CNT];
 } __aligned(PG_SZ) pg_table_s;
 
-extern u32       swapper_pg_dir[1024];
-extern const u8  skheap[];
-extern const u8  ekheap[];
+extern u32 swapper_pg_dir[PG_ENTRY_CNT];
+extern u8  skheap[];
+extern u8  ekheap[];
 
 static inline u32 get_pg_dir_idx(virt_addr_t vaddr) {
     return vaddr >> 22;
@@ -78,14 +81,14 @@ static inline pg_table_entry_s* get_pg_table_entry(u32 pg_dir_idx, u32 pg_table_
     return &get_pg_table(pg_dir_idx)->entries[pg_table_idx];
 }
 
-static inline void set_pg_dir_entry(pg_dir_entry_s* entry, const phys_addr_t paddr, const u32 flags) {
+static inline void set_pg_dir_entry(pg_dir_entry_s* entry, phys_addr_t paddr, u32 flags) {
     entry->present = 1;
     entry->rw      = 1;
     entry->user    = (flags & PG_USER_FLAG) ? 1 : 0;
     entry->paddr   = paddr >> 12;
 }
 
-static inline void set_pg_table_entry(pg_table_entry_s* entry, const phys_addr_t paddr, const u32 flags) {
+static inline void set_pg_table_entry(pg_table_entry_s* entry, phys_addr_t paddr, u32 flags) {
     entry->present = 1;
     entry->rw      = (flags & PG_RW_FLAG) ? 1 : 0;
     entry->user    = (flags & PG_USER_FLAG) ? 1 : 0;
@@ -117,7 +120,7 @@ static void __init alloc_pg_table(virt_addr_t vaddr) {
     memset(get_pg_table(pg_dir_idx), 0, sizeof(pg_table_s));
 }
 
-void vmm_pg_fault_handler(const int_frm_s* frm) {
+void vmm_pg_fault_handler(int_frm_s* frm) {
     if (likely(!(frm->err & 1))) {
         virt_addr_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
@@ -147,6 +150,37 @@ void vmm_set_pg_flags(virt_addr_t vaddr, u32 flags) {
     flush_tlb_mapping(vaddr);
 }
 
+bool vmm_range_accessible(virt_addr_t vaddr, size_t nbytes, u32 flags) {
+    if (nbytes == 0)
+        return true;
+
+    virt_addr_t first = vaddr & ~(PG_SZ - 1u), last = (vaddr + nbytes - 1u) & ~(PG_SZ - 1u);
+    for (virt_addr_t pg = first; ; pg += PG_SZ) {
+        u32 pg_dir_idx = get_pg_dir_idx(pg);
+        pg_dir_entry_s* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
+        if (!pg_dir_entry->present)
+            return false;
+
+        if ((flags & PG_USER_FLAG) && !pg_dir_entry->user)
+            return false;
+
+        pg_table_entry_s* pg_table_entry = get_pg_table_entry(pg_dir_idx, get_pg_table_idx(pg));
+        if (!pg_table_entry->present)
+            return false;
+
+        if ((flags & PG_USER_FLAG) && !pg_table_entry->user)
+            return false;
+
+        if ((flags & PG_RW_FLAG) && !pg_table_entry->rw)
+            return false;
+
+        if (pg == last)
+            break;
+    }
+
+    return true;
+}
+
 phys_addr_t vmm_create_aspace(void) {
     phys_addr_t paddr = pmm_alloc_frm();
     if (unlikely(!paddr))
@@ -156,7 +190,7 @@ phys_addr_t vmm_create_aspace(void) {
     pg_dir_s* new = (pg_dir_s*)VMM_MMU_SCRATCH;
     memset(new, 0, sizeof(pg_dir_s));
 
-    const pg_dir_s* kernel_pg_dir = (const pg_dir_s*)swapper_pg_dir;
+    pg_dir_s* kernel_pg_dir = (pg_dir_s*)swapper_pg_dir;
     for (u32 pg_dir_idx = HIGHER_HALF_IDX; pg_dir_idx < PG_DIR_IDX; pg_dir_idx++)
         new->entries[pg_dir_idx] = kernel_pg_dir->entries[pg_dir_idx];
 
@@ -238,14 +272,14 @@ void __init vmm_init(void) {
     set_pg_dir_entry(&((pg_dir_s*)swapper_pg_dir)->entries[PG_DIR_IDX], __pa(swapper_pg_dir), PG_RW_FLAG);
     flush_tlb();
     
-    const size_t span = (1u << 22u);
+    size_t span = (1u << 22u);
     virt_addr_t start = ALIGN_DOWN_TO((virt_addr_t)skheap, span), end = ALIGN_UP_TO((virt_addr_t)ekheap, span);
     for (virt_addr_t vaddr = start; vaddr < end; vaddr += span)
         alloc_pg_table(vaddr);
 
     alloc_pg_table(VMM_SCRATCH_BASE);
 
-    const phys_addr_t ipc_scratch_frm = pmm_alloc_frm();
+    phys_addr_t ipc_scratch_frm = pmm_alloc_frm();
     if (unlikely(!ipc_scratch_frm))
         PANIC("Error: Failed to allocate frame");
 

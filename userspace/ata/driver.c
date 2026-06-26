@@ -1,7 +1,7 @@
-#include "driver.h"
-#include "regs.h"
-#include "uapi/errno.h"
-#include "uapi/io.h"
+#include <uapi/errno.h>
+#include <uapi/io.h>
+#include <userspace/ata/driver.h>
+#include <userspace/ata/regs.h>
 
 static ata_channel_s channels[2] = {
     { 
@@ -71,15 +71,15 @@ static i32 ata_probe_drv(ata_drv_s* drv) {
     return E_OK;
 }
 
-u8 ata_read_status(const ata_channel_s* channel) {
+u8 ata_read_status(ata_channel_s* channel) {
     return ata_read_reg(channel, ATA_STATUS_REG_OFFSET);
 }
 
-u8 ata_read_alt_status(const ata_channel_s* channel) {
+u8 ata_read_alt_status(ata_channel_s* channel) {
     return inb(channel->ctrl);
 }
 
-i32 ata_ready_wait(const ata_channel_s* channel) {
+i32 ata_ready_wait(ata_channel_s* channel) {
     for (u32 spins = 0; spins < 1000000; spins++) {
         u8 status = ata_read_status(channel);
         if (status & ATA_STATUS_REG_BSY_BIT)
@@ -95,7 +95,7 @@ i32 ata_ready_wait(const ata_channel_s* channel) {
     return -(i32)E_AGAIN;
 }
 
-void ata_select_wait(const ata_channel_s* channel) {
+void ata_select_wait(ata_channel_s* channel) {
     for (u32 idx = 0; idx < 15; idx++)
         ata_read_alt_status(channel);
 }

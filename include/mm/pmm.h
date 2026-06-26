@@ -1,7 +1,7 @@
 #pragma once
 
-#include "boot/multiboot.h"
-#include "config.h"
+#include <boot/multiboot.h>
+#include <config.h>
 
 /**
  * pmm_free_init_section - Frees the frames occupied by the .init section.
@@ -19,7 +19,7 @@ void pmm_free_init_section(void);
 phys_addr_t pmm_alloc_frm(void);
 
 /**
- * pmm_free_frm - Frees the physical frame found at @paddr.
+ * pmm_free_frm - Frees the page-aligned physical frame found at @paddr.
  * @paddr: The physical address of the frame to free.
  */
 void pmm_free_frm(phys_addr_t paddr);
@@ -33,8 +33,8 @@ void pmm_free_frm(phys_addr_t paddr);
 phys_addr_t pmm_alloc_frms(u32 cnt);
 
 /**
- * pmm_free_frms - Frees @cnt physically contiguous physical frames starting
- *                 at @paddr.
+ * pmm_free_frms - Frees @cnt physically contiguous, page-aligned physical 
+ *                 frames starting at @paddr.
  * @paddr: The physical address of the first frame to free.
  * @cnt: The number of frames to free.
  */
@@ -44,4 +44,4 @@ void pmm_free_frms(phys_addr_t paddr, u32 cnt);
  * pmm_init - Initializes the physical memory manager (PMM).
  * @mbinfo: The multiboot information structure.
  */
-void __init pmm_init(const multiboot_info_t* mbinfo);
+void __init pmm_init(multiboot_info_t* mbinfo);

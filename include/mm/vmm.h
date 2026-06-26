@@ -1,8 +1,13 @@
 #pragma once
 
-#include "config.h"
-#include "arch/x86/idt.h"
-#include "uapi/mm.h"
+#include <arch/x86/idt.h>
+#include <config.h>
+#include <kernel/sync/spinlock.h>
+#include <mm.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+extern spinlock_s vmm_scratch_lk;
 
 #define VMM_SCRATCH_BASE 0xFEC00000u                /* Scratch page table virtual address */
 #define VMM_MMU_SCRATCH  VMM_SCRATCH_BASE           /* MMU scratch frame virtual address  */
@@ -12,7 +17,7 @@
  * vmm_pg_fault_handler - Handles a page-fault exception.
  * @frm: The pointer to the interrupt stack frame.
  */
-void vmm_pg_fault_handler(const int_frm_s* frm);
+void vmm_pg_fault_handler(int_frm_s* frm);
 
 /**
  * vmm_set_pg_flags - Updates the mapping at @vaddr with @flags.
@@ -20,6 +25,21 @@ void vmm_pg_fault_handler(const int_frm_s* frm);
  * @flags: The flags to set.
  */
 void vmm_set_pg_flags(virt_addr_t vaddr, u32 flags);
+
+/**
+ * vmm_range_accessible - Checks that every page in [@vaddr, @vaddr + @nbytes)
+ *                        is mapped with @flags in the active address space.
+ * @vaddr: The start virtual address of the range.
+ * @nbytes: The byte length of the range.
+ * @flags: The required page flags.
+ *
+ * Preconditions:
+ * - The address space to check must be the currently active one, since the
+ *   page tables are read through the recursive mapping.
+ *
+ * Returns: true if every page in the range satisfies @flags, false otherwise.
+ */
+bool vmm_range_accessible(virt_addr_t vaddr, size_t nbytes, u32 flags);
 
 /**
  * vmm_create_aspace - Creates a new address space. Higher-half mappings are

@@ -1,9 +1,8 @@
 #pragma once
 
 #include <stdbool.h>
-
-#include "uapi/ata.h"
-#include "uapi/types.h"
+#include <uapi/ata.h>
+#include <uapi/types.h>
 
 typedef struct ata_channel_s {
     u16 io;     /* Base I/O port       */
@@ -27,27 +26,27 @@ typedef struct ata_drv_s {
  * @channel: The ATA channel.
  * Returns: The ATA status byte.
  */
-u8 ata_read_status(const ata_channel_s* channel);
+u8 ata_read_status(ata_channel_s* channel);
 
 /**
  * ata_read_alt_status - Reads the ATA alternate status register.
  * @channel: The ATA channel.
  * Returns: The ATA alternate status byte.
  */
-u8 ata_read_alt_status(const ata_channel_s* channel);
+u8 ata_read_alt_status(ata_channel_s* channel);
 
 /**
  * ata_ready_wait - Waits until @channel is ready to send/receive data.
  * @channel: The ATA channel.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 ata_ready_wait(const ata_channel_s* channel);
+i32 ata_ready_wait(ata_channel_s* channel);
 
 /**
  * ata_select_wait - Waits until the drive select command has settled.
  * @channel: The ATA channel.
  */
-void ata_select_wait(const ata_channel_s* channel);
+void ata_select_wait(ata_channel_s* channel);
 
 /**
  * ata_select_drv - Selects the master/slave drive on @channel.

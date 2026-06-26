@@ -16,20 +16,20 @@ size_t klog_read(char* dst, size_t len, size_t off);
  * klog_putc - Writes @c to the kernel log.
  * @c: The character to write.
  */
-void klog_putc(const char c);
+void klog_putc(char c);
 
 /**
  * klog_puts - Writes @str to the kernel log.
  * @str: The string to write.
  */
-void klog_puts(const char* str);
+void klog_puts(char* str);
 
 /**
  * klog_write - Writes @buf to the kernel log, up to @len bytes.
  * @buf: The buffer to write.
  * @len: The buffer length.
  */
-void klog_write(const char* buf, const size_t len);
+void klog_write(char* buf, size_t len);
 
 /**
  * klog_clear - Clears the kernel log.

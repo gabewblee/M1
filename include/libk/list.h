@@ -1,35 +1,34 @@
 #pragma once
 
+#include <config.h>
 #include <stddef.h>
-
-#include "config.h"
 
 typedef struct list_node_s {
     struct list_node_s* prev; /* Previous node in doubly-linked list */
     struct list_node_s* next; /* Next node in doubly-linked list     */
 } list_node_s;
 
-#define get_container_of(ptr, type, member)                                              \
+#define get_container_of(ptr, type, member)                                        \
     ((type*)((uintptr_t)(ptr) - offsetof(type, member)))
 
-#define list_entry(ptr, type, member)                                                    \
+#define list_entry(ptr, type, member)                                              \
     get_container_of(ptr, type, member)
 
-#define list_first_entry(head, type, member)                                             \
-    list_entry(((const list_node_s*)(head))->next, type, member)
+#define list_first_entry(head, type, member)                                       \
+    list_entry(((list_node_s*)(head))->next, type, member)
 
-#define list_for_each(pos, head)                                                         \
-    for (pos = ((const list_node_s*)(head))->next; pos != (head); pos = pos->next)
+#define list_for_each(pos, head)                                                   \
+    for (pos = ((list_node_s*)(head))->next; pos != (head); pos = pos->next)
 
-#define list_for_each_entry(pos, head, member)                                           \
-    for (pos = list_entry(((const list_node_s*)(head))->next, __typeof__(*pos), member); \
-         &pos->member != (head);                                                         \
+#define list_for_each_entry(pos, head, member)                                     \
+    for (pos = list_entry(((list_node_s*)(head))->next, __typeof__(*pos), member); \
+         &pos->member != (head);                                                   \
          pos = list_entry(pos->member.next, __typeof__(*pos), member))
 
-#define list_for_each_entry_safe(pos, tmp, head, member)                                 \
-    for (pos = list_entry(((const list_node_s*)(head))->next, __typeof__(*pos), member), \
-         tmp = list_entry(pos->member.next, __typeof__(*pos), member);                   \
-         &pos->member != (head);                                                         \
+#define list_for_each_entry_safe(pos, tmp, head, member)                           \
+    for (pos = list_entry(((list_node_s*)(head))->next, __typeof__(*pos), member), \
+         tmp = list_entry(pos->member.next, __typeof__(*pos), member);             \
+         &pos->member != (head);                                                   \
          pos = tmp, tmp = list_entry(tmp->member.next, __typeof__(*tmp), member))
 
 /**
@@ -37,21 +36,21 @@ typedef struct list_node_s {
  * @head: The head of the list.
  * Returns: 1 if the list is empty, 0 otherwise.
  */
-static inline int list_is_empty(const list_node_s* head) {
+static inline int list_is_empty(list_node_s* head) {
     return head->next == head;
 }
 
 /**
- * list_is_attached - Checks if a list node is attached to a list.
+ * list_is_attached - Checks if @node is attached to a list.
  * @node: The list node to check.
  * Returns: 1 if the list node is attached, 0 otherwise.
  */
-static inline int list_is_attached(const list_node_s* node) {
+static inline int list_is_attached(list_node_s* node) {
     return node->next != node;
 }
 
 /**
- * list_add_to_head - Adds a list node to the head of a list.
+ * list_add_to_head - Adds @node to the head of a list.
  * @node: The list node to add.
  * @head: The head of the list.
  */
@@ -63,7 +62,7 @@ static inline void list_add_to_head(list_node_s* node, list_node_s* head) {
 }
 
 /**
- * list_add_to_tail - Adds a list node to the tail of a list.
+ * list_add_to_tail - Adds @node to the tail of a list.
  * @node: The list node to add.
  * @head: The head of the list.
  */
@@ -75,7 +74,7 @@ static inline void list_add_to_tail(list_node_s* node, list_node_s* head) {
 }
 
 /**
- * list_del - Deletes a list node.
+ * list_del - Deletes @node.
  * @node: The list node to delete.
  */
 static inline void list_del(list_node_s* node) {
@@ -86,7 +85,7 @@ static inline void list_del(list_node_s* node) {
 }
 
 /**
- * list_init - Initializes a list node.
+ * list_init - Initializes @node.
  * @node: The list node to initialize.
  */
 static inline void list_init(list_node_s* node) {

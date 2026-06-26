@@ -1,7 +1,7 @@
 #pragma once
 
-#include "driver.h"
-#include "uapi/uapi.h"
+#include <uapi/uapi.h>
+#include <userspace/ata/driver.h>
 
 /* ATA base I/O port offsets */
 #define ATA_DATA_REG_OFFSET       0u    /* Data register               */
@@ -33,18 +33,18 @@
 #define ATA_IDENTIFY_CMD          0xECu /* Identify drive command      */
 #define ATA_FLUSH_CMD             0xE7u /* Flush cache command         */
 
-static inline u16 ata_reg_port(const ata_channel_s* channel, u8 reg) {
+static inline u16 ata_reg_port(ata_channel_s* channel, u8 reg) {
     return (u16)(channel->io + reg);
 }
 
-static inline u8 ata_read_reg(const ata_channel_s* channel, u8 reg) {
+static inline u8 ata_read_reg(ata_channel_s* channel, u8 reg) {
     return inb(ata_reg_port(channel, reg));
 }
 
-static inline void ata_write_reg(const ata_channel_s* channel, u8 reg, u8 val) {
+static inline void ata_write_reg(ata_channel_s* channel, u8 reg, u8 val) {
     outb(ata_reg_port(channel, reg), val);
 }
 
-static inline void ata_write_ctrl(const ata_channel_s* channel, u8 val) {
+static inline void ata_write_ctrl(ata_channel_s* channel, u8 val) {
     outb(channel->ctrl, val);
 }

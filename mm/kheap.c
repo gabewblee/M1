@@ -1,8 +1,8 @@
+#include <bits.h>
+#include <libk/string.h>
+#include <libk/list.h>
+#include <mm/kheap.h>
 #include <stdbool.h>
-
-#include "bits.h"
-#include "libk/list.h"
-#include "mm/kheap.h"
 
 #define MIN_BLK_SZ (sizeof(kheap_blk_hdr_s) + sizeof(kheap_blk_ftr_s) + 16) /* Minimum block size */
 
@@ -19,10 +19,10 @@ typedef struct kheap_blk_ftr_s {
 
 static list_node_s free_list;
 
-extern const u8 skheap[];
-extern const u8 ekheap[];
+extern u8 skheap[];
+extern u8 ekheap[];
 
-static inline kheap_blk_hdr_s* get_hdr(const kheap_blk_ftr_s* ftr) {
+static inline kheap_blk_hdr_s* get_hdr(kheap_blk_ftr_s* ftr) {
     return ftr->hdr;
 }
 
@@ -31,7 +31,7 @@ static inline void set_hdr(kheap_blk_hdr_s* hdr, size_t sz, bool free) {
     hdr->free = free;
 }
 
-static inline kheap_blk_ftr_s* get_ftr(const kheap_blk_hdr_s* hdr) {
+static inline kheap_blk_ftr_s* get_ftr(kheap_blk_hdr_s* hdr) {
     return (kheap_blk_ftr_s*)((uintptr_t)hdr + hdr->sz - sizeof(kheap_blk_ftr_s));
 }
 
@@ -47,20 +47,20 @@ static inline void blk_init(kheap_blk_hdr_s* hdr, size_t sz, bool free) {
     set_ftr(hdr);
 }
 
-static inline kheap_blk_hdr_s* get_nxt(const kheap_blk_hdr_s* hdr) {
+static inline kheap_blk_hdr_s* get_nxt(kheap_blk_hdr_s* hdr) {
     return (kheap_blk_hdr_s*)((u8*)hdr + hdr->sz);
 }
 
-static inline bool has_nxt(const kheap_blk_hdr_s* hdr) {
+static inline bool has_nxt(kheap_blk_hdr_s* hdr) {
     return (u8*)get_nxt(hdr) < ekheap;
 }
 
-static inline kheap_blk_hdr_s* get_prv(const kheap_blk_hdr_s* hdr) {
-    const kheap_blk_ftr_s* ftr = (const kheap_blk_ftr_s*)((u8*)hdr - sizeof(kheap_blk_ftr_s));
+static inline kheap_blk_hdr_s* get_prv(kheap_blk_hdr_s* hdr) {
+    kheap_blk_ftr_s* ftr = (kheap_blk_ftr_s*)((u8*)hdr - sizeof(kheap_blk_ftr_s));
     return get_hdr(ftr);
 }
 
-static inline bool has_prv(const kheap_blk_hdr_s* hdr) {
+static inline bool has_prv(kheap_blk_hdr_s* hdr) {
     return (u8*)hdr > skheap;
 }
 
@@ -114,7 +114,7 @@ static inline kheap_blk_hdr_s* coalesce(kheap_blk_hdr_s* hdr) {
 }
 
 static inline void split_blk(kheap_blk_hdr_s* hdr, size_t sz) {
-    const size_t remaining = hdr->sz - sz;
+    size_t remaining = hdr->sz - sz;
     if (remaining < MIN_BLK_SZ)
         return;
 
@@ -126,8 +126,16 @@ static inline void split_blk(kheap_blk_hdr_s* hdr, size_t sz) {
     add_to_free_list(new);
 }
 
+void* kzalloc(size_t sz) {
+    void* ptr = kmalloc(sz);
+    if (likely(ptr))
+        memset(ptr, 0, sz);
+
+    return ptr;
+}
+
 void* kmalloc(size_t sz) {
-    const size_t req = get_req_blk_sz(sz);
+    size_t req = get_req_blk_sz(sz);
     kheap_blk_hdr_s* cur;
     list_for_each_entry(cur, &free_list, link) {
         if (cur->free && cur->sz >= req) {

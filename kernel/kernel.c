@@ -1,21 +1,19 @@
-#include "arch/x86/idt.h"
-#include "arch/x86/pic.h"
-#include "boot/multiboot.h"
-#include "config.h"
-#include "dev/console.h"
-#include "kernel/blk/ata.h"
-#include "kernel/blk/blk.h"
-#include "kernel/core/panic.h"
-#include "kernel/core/sched.h"
-#include "kernel/core/task.h"
-#include "kernel/core/thread.h"
-#include "kernel/ipc/ipc.h"
-#include "kernel/ipc/servers.h"
-#include "kernel/irq/irq.h"
-#include "mm/kheap.h"
-#include "mm/page.h"
-#include "mm/pmm.h"
-#include "mm/vmm.h"
+#include <arch/x86/idt.h>
+#include <arch/x86/pic.h>
+#include <boot/multiboot.h>
+#include <config.h>
+#include <dev/console.h>
+#include <kernel/core/panic.h>
+#include <kernel/core/sched.h>
+#include <kernel/core/task.h>
+#include <kernel/core/thread.h>
+#include <kernel/ipc/ipc.h>
+#include <kernel/ipc/servers.h>
+#include <kernel/irq/irq.h>
+#include <mm/kheap.h>
+#include <mm/page.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
 
 extern u32         magic;
 extern phys_addr_t mbi;
@@ -41,7 +39,7 @@ void __noreturn kmain(void) {
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         PANIC("Error: Invalid multiboot magic number");
 
-    const multiboot_info_t* mbinfo = (const multiboot_info_t*)(__va(mbi));
+    multiboot_info_t* mbinfo = (multiboot_info_t*)(__va(mbi));
     if(!(mbinfo->flags >> 6 & 0x1))
         PANIC("Error: Invalid mmap provided by GRUB bootloader");
 
@@ -64,11 +62,7 @@ void __noreturn kmain(void) {
     console_puts(ALL_FLAG, "[M1] Initialized thread0\n");
 
     servers_init(mbinfo);
-    console_unregister_dev(EVGA_FLAG);
-
-    blk_init();
-    ata_blk_init();
-    console_puts(ALL_FLAG, "[M1] Initialized block devices\n");
+    console_unregister(EVGA_FLAG);
 
     pmm_free_init_section();
     for (;;) sched_yield();

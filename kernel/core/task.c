@@ -1,10 +1,9 @@
+#include <kernel/core/panic.h>
+#include <kernel/core/task.h>
+#include <kernel/ipc/ipc.h>
+#include <libk/string.h>
+#include <mm/kheap.h>
 #include <stddef.h>
-
-#include "kernel/ipc/ipc.h"
-#include "kernel/core/panic.h"
-#include "kernel/core/task.h"
-#include "libk/string.h"
-#include "mm/kheap.h"
 
 task_ctrl_blk_s* task0;
 
@@ -59,7 +58,7 @@ task_ctrl_blk_s* task_create(phys_addr_t cr3) {
     return task;
 }
 
-void task_destroy(const task_ctrl_blk_s* task) {
+void task_destroy(task_ctrl_blk_s* task) {
     if (unlikely(task == task0))
         return;
 

@@ -1,19 +1,15 @@
 #pragma once
 
-#include "uapi/uapi.h"
+#include <uapi/uapi.h>
+#include <userspace/server/server.h>
+
+extern const server_handler_f ata_handlers[]; /* ATA operation table */
 
 /**
  * init - Initializes ATA server.
  * Returns: E_OK on success, or a negative error code on failure.
  */
 i32 init(void);
-
-/**
- * dispatch - Dispatches @msg to the ATA server.
- * @msg: The IPC message to dispatch.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 dispatch(ipc_msg_s* msg);
 
 /**
  * fini - Finalizes ATA server. Currently a no-op.

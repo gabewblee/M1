@@ -1,7 +1,9 @@
 #pragma once
 
-#include "config.h"
-#include "libk/list.h"
+#include <config.h>
+#include <libk/list.h>
+
+#define KERNEL_TASK_ID 0u
 
 typedef struct port_s port_s;
 
@@ -17,7 +19,7 @@ typedef struct task_ctrl_blk_s {
 } task_ctrl_blk_s;
 
 /**
- * task_lookup - Looks up the task control block by @id.
+ * task_lookup - Looks up the task control block associated with @id.
  * @id: The task ID to lookup.
  * Returns: The matching task control block, or NULL on failure.
  */
@@ -31,14 +33,14 @@ task_ctrl_blk_s* task_lookup(u32 id);
 task_ctrl_blk_s* task_create(phys_addr_t cr3);
 
 /**
- * task_destroy - Destroys @task. Releases its resources.
+ * task_destroy - Destroys @task.
  * @task: The task to destroy.
  *
  * Preconditions:
  * - @task is not task0.
- * - @task has no live threads left.
+ * - @task has no live threads.
  */
-void task_destroy(const task_ctrl_blk_s* task);
+void task_destroy(task_ctrl_blk_s* task);
 
 /**
  * task0_init - Initializes the tasking subsystem.

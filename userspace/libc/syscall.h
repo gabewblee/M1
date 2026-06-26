@@ -1,26 +1,27 @@
 #pragma once
 
-#include "uapi/uapi.h"
+#include <uapi/uapi.h>
 
 /**
- * sys_ipc_send - Sends @msg to task @dst's port. Does not block the caller.
+ * sys_ipc_send - Sends @msg to task @dst's port. Blocks while the port is full,
+ *                until space becomes available.
  * @dst: The destination task ID.
  * @msg: The message to send.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 sys_ipc_send(u32 dst, const ipc_msg_s* msg);
+i32 sys_ipc_send(u32 dst, ipc_msg_s* msg);
 
 /**
- * sys_ipc_recv - Receives a message into @out from the caller's port. Works
- *                in conjunction with ipc_send().
- * @out: The output message buffer.
+ * sys_ipc_recv - Receives a message into @msg from the caller's port. Blocks
+ *                until a message is available.
+ * @msg: The output message buffer.
  * Returns: E_OK on success.
  */
-i32 sys_ipc_recv(ipc_msg_s* out);
+i32 sys_ipc_recv(ipc_msg_s* msg);
 
 /**
- * sys_ipc_call - Atomic ipc_send() and ipc_recv() operation. Sends @msg to
- *                task @dst's port and waits for a reply in @msg. Blocks the caller.
+ * sys_ipc_call - Sends @msg to task @dst's port, then blocks until a reply is
+ *                received into @msg. Requires the caller to have a reply port.
  * @dst: The destination task ID.
  * @msg: The in-out message buffer.
  * Returns: E_OK on success, or a negative error code on failure.
@@ -28,18 +29,18 @@ i32 sys_ipc_recv(ipc_msg_s* out);
 i32 sys_ipc_call(u32 dst, ipc_msg_s* msg);
 
 /**
- * sys_ipc_reply - Delivers @msg to thread @client's reply port. Works in
- *                 conjunction with ipc_call().
- * @client: The client thread ID.
- * @msg: The reply message to deliver.
+ * sys_ipc_reply - Sends @msg to thread @client's reply port, waking it if it is
+ *                 blocked awaiting the reply.
+ * @client: The destination thread ID.
+ * @msg: The message to send.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 sys_ipc_reply(u32 client, const ipc_msg_s* msg);
+i32 sys_ipc_reply(u32 client, ipc_msg_s* msg);
 
 /**
  * sys_thread_create - Creates a new thread in the current task.
- * @entry: The thread's entry function.
- * @priority: The thread's initial scheduler priority.
+ * @entry: The thread's initial entry function.
+ * @priority: The thread's initial scheduling priority.
  * Returns: The new thread ID on success, or a negative error code on failure.
  */
 i32 sys_thread_create(void (*entry)(void), u32 priority);
@@ -70,7 +71,7 @@ i32 sys_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags);
  * @vaddr: The virtual address to unmap.
  * Returns: E_OK on success.
  */
-i32 sys_unmap_pg(const void* vaddr);
+i32 sys_unmap_pg(void* vaddr);
 
 /**
  * sys_log_read - Reads at most @len bytes from the kernel log ring buffer,
@@ -78,29 +79,44 @@ i32 sys_unmap_pg(const void* vaddr);
  * @dst: The output buffer.
  * @len: The maximum number of bytes to read.
  * @off: The offset from the oldest available byte.
- * Returns: The number of bytes copied to @dst on success, or a negative error
- *          code on failure.
+ * Returns: The number of bytes copied to @dst.
  */
 i32 sys_log_read(void* dst, u32 len, u32 off);
 
 /**
- * sys_server_lookup - Looks up the task ID by @name.
- * @name: The NULL-terminated server name.
+ * sys_server_lookup - Looks up the task ID associated with @id.
+ * @id: The server ID to lookup.
  * Returns: The task ID on success, or a negative error code on failure.
  */
-i32 sys_server_lookup(const char* name);
+i32 sys_server_lookup(u32 id);
 
 /**
- * sys_irq_register_handler - Installs the kernel IRQ stub for @irq and
- *                            unmasks the line.
- * @irq: The PIC IRQ number.
+ * sys_irq_register_handler - Registers a handler for IRQ @irq. The handler
+ *                            unblocks all threads waiting for IRQ @irq.
+ * @irq: The IRQ number to register.
  * Returns: E_OK on success, or a negative error code on failure.
  */
 i32 sys_irq_register_handler(u32 irq);
 
 /**
- * sys_irq_wait - Blocks until @irq fires.
- * @irq: The PIC IRQ number.
+ * sys_irq_wait_for - Waits for IRQ @irq to fire.
+ * @irq: The IRQ number to wait for.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 sys_irq_wait(u32 irq);
+i32 sys_irq_wait_for(u32 irq);
+
+/**
+ * sys_vm_copy - Transfers @len bytes between the caller's address space and
+ *               thread @id's address space.
+ * 
+ *               @dir controls direction:
+ *               - VM_COPY_FROM_PEER: copies from @dst in peer into @src in caller.
+ *               - VM_COPY_TO_PEER: copies from @src in caller into @dst in peer.
+ * @id: The peer thread ID.
+ * @dst: Buffer in the peer's address space.
+ * @src: Buffer in the caller's address space.
+ * @len: Number of bytes to transfer.
+ * @dir: VM_COPY_FROM_PEER or VM_COPY_TO_PEER.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 sys_vm_copy(u32 id, void* dst, void* src, u32 len, u32 dir);

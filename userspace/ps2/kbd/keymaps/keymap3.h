@@ -1,8 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
-
-#include "uapi/kbd.h"
+#include <uapi/kbd.h>
 
 /**
  * decode3 - Decodes @code into @event.

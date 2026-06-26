@@ -1,7 +1,7 @@
 #pragma once
 
-#include "uapi/compiler.h"
-#include "uapi/types.h"
+#include <compiler.h>
+#include <types.h>
 
 /**
  * inb - Reads a byte from an I/O port.

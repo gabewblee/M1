@@ -1,11 +1,8 @@
 #pragma once
 
+#include <ipc.h>
 #include <stddef.h>
-
-#include "uapi/ipc.h"
-#include "uapi/types.h"
-
-#define VGA_SERVER_NAME "vga"
+#include <types.h>
 
 #define VGA_SERVER_OPS(X) \
     X(1, putc)            \

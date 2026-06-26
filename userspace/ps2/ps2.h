@@ -1,8 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
-
-#include "types.h"
+#include <uapi/types.h>
 
 /**
  * ps2_data_ready - Checks if data is ready on the PS/2 data port.

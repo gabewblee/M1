@@ -1,8 +1,14 @@
 #pragma once
 
+#include <config.h>
 #include <stddef.h>
 
-#include "config.h"
+/**
+ * kzalloc - Allocates a zeroed memory block of at least @sz bytes.
+ * @sz: The requested memory block size.
+ * Returns: The pointer to the allocated memory block, or NULL on failure.
+ */
+void* kzalloc(size_t sz);
 
 /**
  * kmalloc - Allocates a memory block of at least @sz bytes.
@@ -18,6 +24,6 @@ void* kmalloc(size_t sz);
 void kfree(void* ptr);
 
 /**
- * kheap_init - Initializes the kernel heap. 
+ * kheap_init - Initializes the kernel heap.
  */
 void __init kheap_init(void);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config.h"
+#include <config.h>
 
 #define EI_MAG0        0      /* File identification    */
 #define EI_MAG1        1      /* File identification    */
@@ -97,3 +97,9 @@ typedef struct elf32_phdr_s {
 	elf32_word_t p_flags;  /* Segment flags 		   */
 	elf32_word_t p_align;  /* Segment alignment        */
 } elf32_phdr_s;
+
+typedef struct elf32_nhdr_s {
+	elf32_word_t n_namesz; /* Note name size       */
+	elf32_word_t n_descsz; /* Note descriptor size */
+	elf32_word_t n_type;   /* Note type            */
+} elf32_nhdr_s;

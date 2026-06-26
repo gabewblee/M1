@@ -1,11 +1,11 @@
-#include "driver.h"
-#include "uapi/io.h"
+#include <uapi/io.h>
+#include <userspace/vga/driver.h>
 
 u8 vga_cur_row;
 u8 vga_cur_col;
 
 static void update_cursor(u8 row, u8 col) {
-    const u16 pos = row * VGA_COL_CNT + col;
+    u16 pos = row * VGA_COL_CNT + col;
     outb(0x3D4, 0x0F);
     outb(0x3D5, (u8)(pos & 0xFF));
     outb(0x3D4, 0x0E);
@@ -14,8 +14,8 @@ static void update_cursor(u8 row, u8 col) {
 
 static void scroll_up(u8 bcolor) {
     volatile u16* buf = (u16*)VGA_ADDR;
-    const u16 blank = (u16)bcolor << 8 | ' ';
-    const int penultimate_row = (VGA_ROW_CNT - 1) * VGA_COL_CNT;
+    u16 blank = (u16)bcolor << 8 | ' ';
+    int penultimate_row = (VGA_ROW_CNT - 1) * VGA_COL_CNT;
     for (int i = 0; i < penultimate_row; i++)
         buf[i] = buf[i + VGA_COL_CNT];
 
@@ -54,12 +54,12 @@ static void backspace(void) {
     }
 
     volatile u16* buf = (u16*)VGA_ADDR;
-    const u16 blank = (u16)' ' | ((u16)((VGA_BLACK_COLOR << 4) | (VGA_WHITE_COLOR & 0x0F)) << 8);
+    u16 blank = (u16)' ' | ((u16)((VGA_BLACK_COLOR << 4) | (VGA_WHITE_COLOR & 0x0F)) << 8);
     buf[vga_cur_row * VGA_COL_CNT + vga_cur_col] = blank;
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_putc(const char c) {
+void vga_putc(char c) {
     if (c == '\0')
         return;
 
@@ -79,7 +79,7 @@ void vga_putc(const char c) {
     }
 
     volatile u16* buf = (u16*)VGA_ADDR;
-    const u16 cell = (u16)(u8)c | ((u16)((VGA_BLACK_COLOR << 4) | (VGA_WHITE_COLOR & 0x0F)) << 8);
+    u16 cell = (u16)(u8)c | ((u16)((VGA_BLACK_COLOR << 4) | (VGA_WHITE_COLOR & 0x0F)) << 8);
     buf[vga_cur_row * VGA_COL_CNT + vga_cur_col] = cell;
     vga_cur_col++;
     if (vga_cur_col >= VGA_COL_CNT)
@@ -88,12 +88,12 @@ void vga_putc(const char c) {
     update_cursor(vga_cur_row, vga_cur_col);
 }
 
-void vga_puts(const char* str) {
+void vga_puts(char* str) {
     while (*str)
         vga_putc(*str++);
 }
 
-void vga_write(const char* str, size_t len) {
+void vga_write(char* str, size_t len) {
     for (size_t i = 0; i < len; i++)
         vga_putc(str[i]);
 }

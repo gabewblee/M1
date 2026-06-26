@@ -1,8 +1,7 @@
 #pragma once
 
+#include <config.h>
 #include <stdint.h>
-
-#include "config.h"
 
 #define PIC1		    0x20     /* Master PIC base port              */
 #define PIC2		    0xA0     /* Slave PIC base port               */
@@ -31,7 +30,7 @@
 #define PIC_READ_ISR    0x0b     /* Select in-service register        */
 
 /**
- * pic_send_eoi - Sends an end-of-interrupt signal to the PIC.
+ * pic_send_eoi - Sends an end-of-interrupt (EOI) signal to the PIC.
  * @irq: The IRQ number that was handled.
  */
 void pic_send_eoi(u8 irq);
@@ -51,31 +50,32 @@ void pic_remap(int offset1, int offset2);
 void pic_disable(void);
 
 /**
- * irq_set_mask - Masks a specific IRQ line.
- * @irq: The IRQ number to mask.
+ * irq_set_mask - Masks interrupt @irq.
+ * @irq: The interrupt number to mask.
  */
 void irq_set_mask(u8 irq);
 
 /**
- * irq_clear_mask - Unmasks a specific IRQ line.
- * @irq: The IRQ number to unmask.
+ * irq_clear_mask - Unmasks interrupt @irq.
+ * @irq: The interrupt number to unmask.
  */
 void irq_clear_mask(u8 irq);
 
 /**
- * pic_get_irr - Returns the combined IRQ request register from both PICs.
+ * pic_get_irr - Returns the combined IRQ request register (IRR) from both PICs.
  * @return: The combined IRR value; bits 0-7 master, bits 8-15 slave.
  */
 u16 pic_get_irr(void);
 
 /**
- * pic_get_isr - Returns the combined IRQ in-service register from both PICs.
+ * pic_get_isr - Returns the combined IRQ in-service register (ISR) from both PICs.
  * @return: The combined ISR value; bits 0-7 master, bits 8-15 slave.
  */
 u16 pic_get_isr(void);
 
 /**
- * pic_init - Initializes the 8259 PIC with the given vector offsets.
+ * pic_init - Initializes the 8259 programmable interrupt controller (PIC) with the
+ *            given vector offsets.
  * @offset1: The vector offset for the master PIC, applied to IRQ 0-7.
  * @offset2: The vector offset for the slave PIC, applied to IRQ 8-15.
  */

@@ -1,7 +1,7 @@
-NASM 		   = nasm
+NASM 	       = nasm
 I686_ELF_GCC   = i686-elf-gcc
 I686_ELF_LD    = i686-elf-ld
-CFLAGS 		   = -ffreestanding -O0 -nostdlib -g
+CFLAGS 	       = -ffreestanding -O0 -nostdlib -g
 KERNEL_CFLAGS  = $(CFLAGS) -I. -Iinclude -Iuapi
 USER_CFLAGS    = $(CFLAGS) -I. -Iuserspace/libc -Iuserspace/server -Iuserspace/ata -Iuapi
 KERNEL_LDFLAGS = -T boot/linker.ld --no-warn-rwx-segments
@@ -21,8 +21,6 @@ KERNEL_SRCS     = arch/x86/idt.c       \
                   dev/console.c        \
                   dev/evga.c           \
                   dev/klog.c           \
-                  kernel/blk/ata.c     \
-                  kernel/blk/blk.c     \
                   kernel/core/panic.c  \
                   kernel/core/sched.c  \
                   kernel/core/task.c   \
@@ -38,7 +36,7 @@ KERNEL_SRCS     = arch/x86/idt.c       \
                   mm/pmm.c             \
                   mm/vmm.c
 KERNEL_ASMS     = arch/x86/isr.asm \
-	   		      boot/boot.asm    \
+	   	          boot/boot.asm    \
        		      kernel/core/switch.asm
 KERNEL_C_OBJS   = $(KERNEL_SRCS:%.c=build/%.o)
 KERNEL_ASM_OBJS = $(KERNEL_ASMS:%.asm=build/%.o)

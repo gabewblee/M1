@@ -1,16 +1,15 @@
+#include <bits.h>
+#include <config.h>
+#include <elf.h>
+#include <libk/string.h>
+#include <loader/loader.h>
+#include <mm/page.h>
+#include <mm/vmm.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <uapi/compiler.h>
 
-#include "bits.h"
-#include "config.h"
-#include "elf.h"
-#include "libk/string.h"
-#include "loader/loader.h"
-#include "mm/page.h"
-#include "mm/vmm.h"
-#include "uapi/compiler.h"
-
-static i32 is_valid_ehdr(const elf32_ehdr_s* ehdr, size_t sz) {
+static i32 is_valid_ehdr(elf32_ehdr_s* ehdr, size_t sz) {
     if (unlikely(sz < sizeof(elf32_ehdr_s)))
         return -1;
 
@@ -53,14 +52,14 @@ static i32 is_valid_ehdr(const elf32_ehdr_s* ehdr, size_t sz) {
     if (ehdr->e_entry == 0 || ehdr->e_entry >= HIGHER_HALF_OFFSET)
         return -1;
 
-    const u64 end = (u64)ehdr->e_phoff + (u64)ehdr->e_phnum * sizeof(elf32_phdr_s);
+    u64 end = (u64)ehdr->e_phoff + (u64)ehdr->e_phnum * sizeof(elf32_phdr_s);
     if (end > sz)
         return -1;
 
     return 0;
 }
 
-static i32 is_valid_load_seg(const elf32_phdr_s* phdr, size_t sz) {
+static i32 is_valid_load_seg(elf32_phdr_s* phdr, size_t sz) {
     if (phdr->p_vaddr == 0)
         return -1;
 
@@ -76,7 +75,7 @@ static i32 is_valid_load_seg(const elf32_phdr_s* phdr, size_t sz) {
     return 0;
 }
 
-static u32 pg_flags_at(const elf32_phdr_s* phdr, const u16 phdr_cnt, virt_addr_t vaddr) {
+static u32 pg_flags_at(elf32_phdr_s* phdr, u16 phdr_cnt, virt_addr_t vaddr) {
     u32 flags = PG_USER_FLAG;
     for (u16 i = 0; i < phdr_cnt; i++) {
         if (phdr[i].p_type != PT_LOAD)
@@ -90,13 +89,49 @@ static u32 pg_flags_at(const elf32_phdr_s* phdr, const u16 phdr_cnt, virt_addr_t
     return flags;
 }
 
-virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
-    const elf32_ehdr_s* ehdr = (const elf32_ehdr_s*)data;
+const server_desc_s* load_server_desc(void* data, size_t sz) {
+    if (unlikely(sz < sizeof(elf32_ehdr_s)))
+        return NULL;
+
+    elf32_ehdr_s* ehdr = (elf32_ehdr_s*)data;
+    if (unlikely((u64)ehdr->e_phoff + (u64)ehdr->e_phnum * sizeof(elf32_phdr_s) > sz))
+        return NULL;
+
+    elf32_phdr_s* phdr = (elf32_phdr_s*)((u8*)data + ehdr->e_phoff);
+    for (u16 i = 0; i < ehdr->e_phnum; i++) {
+        if (phdr[i].p_type != PT_NOTE)
+            continue;
+
+        if ((u64)phdr[i].p_offset + (u64)phdr[i].p_filesz > sz)
+            continue;
+
+        u8* notes = (u8*)data + phdr[i].p_offset;
+        u32 len = phdr[i].p_filesz;
+        for (u32 off = 0; off + sizeof(elf32_nhdr_s) <= len;) {
+            elf32_nhdr_s* nhdr = (elf32_nhdr_s*)(notes + off);
+            u32 namesz = ALIGN_UP_TO(nhdr->n_namesz, 4u);
+            u32 descsz = ALIGN_UP_TO(nhdr->n_descsz, 4u);
+            u32 body = off + (u32)sizeof(elf32_nhdr_s);
+            if ((u64)body + namesz + descsz > len)
+                break;
+
+            if (nhdr->n_type == SERVER_NOTE_TYPE && nhdr->n_descsz >= sizeof(server_desc_s))
+                return (const server_desc_s*)(notes + body + namesz);
+
+            off = body + namesz + descsz;
+        }
+    }
+
+    return NULL;
+}
+
+virt_addr_t load_elf32(void* data, size_t sz) {
+    elf32_ehdr_s* ehdr = (elf32_ehdr_s*)data;
     if (unlikely(is_valid_ehdr(ehdr, sz) == -1))
         return 0;
 
-    const elf32_phdr_s* phdr = (const elf32_phdr_s*)((const u8*)data + ehdr->e_phoff);
-    const u16 phdr_cnt = ehdr->e_phnum;
+    elf32_phdr_s* phdr = (elf32_phdr_s*)((u8*)data + ehdr->e_phoff);
+    u16 phdr_cnt = ehdr->e_phnum;
 
     virt_addr_t prev = 0; bool ok = false;
     for (u16 i = 0; i < phdr_cnt; i++) {
@@ -139,7 +174,7 @@ virt_addr_t load_elf_from_memory(const void* data, size_t sz) {
         if (phdr[i].p_type != PT_LOAD)
             continue;
 
-        memcpy((void*)phdr[i].p_vaddr, (const u8*)data + phdr[i].p_offset, phdr[i].p_filesz);
+        memcpy((void*)phdr[i].p_vaddr, (u8*)data + phdr[i].p_offset, phdr[i].p_filesz);
         if (phdr[i].p_memsz > phdr[i].p_filesz)
             memset((void*)(phdr[i].p_vaddr + phdr[i].p_filesz), 0, phdr[i].p_memsz - phdr[i].p_filesz);
     }

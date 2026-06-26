@@ -1,61 +1,57 @@
 #pragma once
 
-#include "config.h"
-#include "kernel/core/thread.h"
-#include "arch/x86/idt.h"
-#include "libk/list.h"
+#include <arch/x86/idt.h>
+#include <config.h>
+#include <kernel/core/thread.h>
+#include <libk/list.h>
 
 #define SCHED_PRIORITY_CNT  32                       /* Priority count            */
 #define SCHED_IDLE_PRIORITY (SCHED_PRIORITY_CNT - 1) /* Idle scheduling priority  */
 #define SCHED_QUANTUM       4                        /* Time slice in timer ticks */
 
 /**
- * sched_pit_handler - Handles scheduling activities per timer tick.
+ * sched_pit_handler - Handles PIT interrupts.
  * @frm: The pointer to the interrupt stack frame.
  */
-void sched_pit_handler(const int_frm_s* frm);
+void sched_pit_handler(int_frm_s* frm);
 
 /**
- * sched_ready - Prepares @thread for scheduling.
- * @thread: The thread to enqueue.
+ * sched_ready - Prepares @thread for scheduling. Preempts the running thread if @thread 
+ *               has a higher priority.
+ * @thread: The thread to prepare.
  */
 void sched_ready(thread_ctrl_blk_s* thread);
 
 /**
- * sched_block - Blocks the running thread on @wait_queue with state @state.
+ * sched_block - Blocks the running thread on @wait_queue with @state, then reschedules.
  * @wait_queue: The wait queue to block on.
  * @state: The blocked state to assign.
  */
 void sched_block(list_node_s* wait_queue, thread_state_e state);
 
 /**
- * sched_unblock - Unblocks @thread.
- * @thread: The thread to wake.
+ * sched_unblock - Unblocks @thread, then prepares it for scheduling.
+ * @thread: The thread to unblock.
  */
 void sched_unblock(thread_ctrl_blk_s* thread);
 
 /**
- * sched_yield - Yields the CPU to the highest priority runnable thread.
+ * sched_yield - Yields to the highest priority thread.
  */
 void sched_yield(void);
 
 /**
- * sched_tick - Handles scheduling activities per timer tick.
- */
-void sched_tick(void);
-
-/**
- * sched_zombify - Zombifies the current thread, adds it to the zombie list,
- *                 and schedules away.
+ * sched_zombify - Zombifies the running thread, then reschedules.
  */
 void __noreturn sched_zombify(void);
 
 /**
- * sched_reap - Reaps all zombie threads.
+ * sched_reap_zombies - Reaps zombie threads.
  */
-void sched_reap(void);
+void sched_reap_zombies(void);
 
 /**
- * sched_init - Initializes the scheduling subsystem.
+ * sched_init - Initializes the run/zombie queues, the locking structures, and the PIT
+ *              interrupt handler.
  */
 void __init sched_init(void);

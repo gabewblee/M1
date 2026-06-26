@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config.h"
+#include <config.h>
 
 #define BIT(x)              (1u << (x))                    /* Builds a bitmask with x-th bit set         */
 #define BIT_TO_WORD(x)      ((x) >> 5)                     /* Converts a bit index to a word index       */

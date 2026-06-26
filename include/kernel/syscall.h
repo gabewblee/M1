@@ -1,7 +1,7 @@
 #pragma once
 
-#include "types.h"
-#include "uapi/syscall.h"
+#include <types.h>
+#include <uapi/syscall.h>
 
 typedef struct syscall_frm_s {
     u32 ebp;    /* Syscall frame base pointer                    */

@@ -2,8 +2,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
-
-#include "types.h"
+#include <uapi/types.h>
 
 /**
  * putc - Writes @c to the VGA console.
@@ -18,7 +17,7 @@ i32 putc(int c);
  * Returns: The number of characters written on success, or a negative error
  *          code on failure.
  */
-i32 puts(const char* str);
+i32 puts(char* str);
 
 /**
  * write - Writes @buf to the VGA console, up to @len bytes.
@@ -27,7 +26,7 @@ i32 puts(const char* str);
  * Returns: The number of bytes written on success, or a negative error code on
  *          failure.
  */
-i32 write(const char* buf, size_t len);
+i32 write(char* buf, size_t len);
 
 /**
  * clear - Clears the VGA console.
@@ -40,13 +39,5 @@ i32 clear(void);
  * @fmt: The format string.
  * Returns: The number of characters written on success, or a negative error
  *          code on failure.
- *       
- * Supports:
- * - %%
- * - %s
- * - %c
- * - %d
- * - %u
- * - %x
  */
-i32 printf(const char* fmt, ...);
+i32 printf(char* fmt, ...);

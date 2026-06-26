@@ -1,6 +1,6 @@
 #pragma once
 
-#include "uapi/kbd.h"
+#include <uapi/kbd.h>
 
 /**
  * ps2_kbd_read - Blocks until the next keyboard event is available.

@@ -1,9 +1,7 @@
 #pragma once
 
-#include "uapi/ipc.h"
-#include "uapi/types.h"
-
-#define ATA_SERVER_NAME "ata"
+#include <ipc.h>
+#include <types.h>
 
 #define ATA_SERVER_OPS(X) \
     X(1, info)            \
@@ -47,5 +45,5 @@ typedef struct ata_server_reply_s {
     ata_server_info_s info; /* Drive information for info() */
 } ata_server_reply_s;
 
-_Static_assert(sizeof(ata_server_req_s) <= IPC_PAYLOAD_SZ,   "Error: Invalid ata_server_req_s size");
+_Static_assert(sizeof(ata_server_req_s)   <= IPC_PAYLOAD_SZ, "Error: Invalid ata_server_req_s size");
 _Static_assert(sizeof(ata_server_reply_s) <= IPC_PAYLOAD_SZ, "Error: Invalid ata_server_reply_s size");

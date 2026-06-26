@@ -1,10 +1,10 @@
 #pragma once
 
-#include "config.h"
+#include <config.h>
 
 /**
- * setup_swapper_pg_dir - Initializes the swapper page directory. Sets up 
- *                        identity mapping and higher-half mappings.
+ * setup_swapper_pg_dir - Initializes the swapper page directory with
+ *                        identity/higher-half mappings.
  *
  * Preconditions:
  * - ekernel is 4 KiB-aligned.
