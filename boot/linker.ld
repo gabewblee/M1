@@ -19,6 +19,13 @@ SECTIONS
 	{
 		sinit = .;
 		*(.init)
+		. = ALIGN(4);
+		sinitcall = .;
+		KEEP(*(.initcall0.init))
+		KEEP(*(.initcall1.init))
+		KEEP(*(.initcall2.init))
+		KEEP(*(.initcall3.init))
+		einitcall = .;
 		einit = .;
 	}
 

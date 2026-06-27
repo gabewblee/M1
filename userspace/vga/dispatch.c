@@ -11,27 +11,27 @@ const server_handler_f vga_handlers[SERVER_OP_MAX] = {
     VGA_SERVER_OPS(SERVER_OP_ENTRY)
 };
 
-static i32 handle_putc(ipc_msg_s* msg) {
-    vga_server_req_s* req = (vga_server_req_s*)msg->data;
+static i32 handle_putc(ipc_packet_s* packet) {
+    vga_server_req_s* req = (vga_server_req_s*)packet->payload;
     vga_putc(req->buf[0]);
-    return rep_stat_only(msg, E_OK);
+    return rep_stat_only(packet, E_OK);
 }
 
-static i32 handle_puts(ipc_msg_s* msg) {
-    vga_server_req_s* req = (vga_server_req_s*)msg->data;
+static i32 handle_puts(ipc_packet_s* packet) {
+    vga_server_req_s* req = (vga_server_req_s*)packet->payload;
     vga_puts(req->buf);
-    return rep_stat_only(msg, E_OK);
+    return rep_stat_only(packet, E_OK);
 }
 
-static i32 handle_write(ipc_msg_s* msg) {
-    vga_server_req_s* req = (vga_server_req_s*)msg->data;
+static i32 handle_write(ipc_packet_s* packet) {
+    vga_server_req_s* req = (vga_server_req_s*)packet->payload;
     vga_write(req->buf, req->len);
-    return rep_stat_only(msg, E_OK);
+    return rep_stat_only(packet, E_OK);
 }
 
-static i32 handle_clear(ipc_msg_s* msg) {
+static i32 handle_clear(ipc_packet_s* packet) {
     vga_clear();
-    return rep_stat_only(msg, E_OK);
+    return rep_stat_only(packet, E_OK);
 }
 
 i32 init(void) {

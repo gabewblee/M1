@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <uapi/kbd.h>
+#include <uapi/types.h>
 
 /**
  * decode2 - Decodes @code into @event.

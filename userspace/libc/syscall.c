@@ -35,20 +35,20 @@ static inline i32 syscall5(u32 no, u32 a1, u32 a2, u32 a3, u32 a4, u32 a5) {
 }
 
 
-i32 sys_ipc_send(u32 dst, ipc_msg_s* msg) {
-    return syscall2(SYS_ipc_send, dst, (u32)msg);
+i32 sys_ipc_send(u32 dst, ipc_packet_s* packet) {
+    return syscall2(SYS_ipc_send, dst, (u32)packet);
 }
 
-i32 sys_ipc_recv(ipc_msg_s* msg) {
-    return syscall1(SYS_ipc_recv, (u32)msg);
+i32 sys_ipc_recv(ipc_packet_s* packet) {
+    return syscall1(SYS_ipc_recv, (u32)packet);
 }
 
-i32 sys_ipc_call(u32 dst, ipc_msg_s* msg) {
-    return syscall2(SYS_ipc_call, dst, (u32)msg);
+i32 sys_ipc_call(u32 dst, ipc_packet_s* packet) {
+    return syscall2(SYS_ipc_call, dst, (u32)packet);
 }
 
-i32 sys_ipc_reply(u32 client, ipc_msg_s* msg) {
-    return syscall2(SYS_ipc_reply, client, (u32)msg);
+i32 sys_ipc_reply(u32 client, ipc_packet_s* packet) {
+    return syscall2(SYS_ipc_reply, client, (u32)packet);
 }
 
 i32 sys_thread_create(void (*entry)(void), u32 priority) {

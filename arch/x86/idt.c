@@ -1,5 +1,6 @@
 #include <arch/x86/idt.h>
 #include <arch/x86/pic.h>
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <stddef.h>
 
@@ -94,3 +95,5 @@ void __init idt_init(void) {
     /* Loads the IDT */
     __asm__ volatile("lidt %0" : : "m"(idtr));
 }
+
+early_initcall(idt_init);

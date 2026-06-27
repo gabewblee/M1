@@ -5,7 +5,7 @@
 
 typedef struct keymap_s {
     bool (*decode)(u8 code, kbd_event_s* event); /* Converts a scancode to a keyboard event   */
-    char (*ascii)(u8 code, bool shifted);               /* Converts a scancode to an ASCII character */
+    char (*ascii)(u8 code, bool shifted);        /* Converts a scancode to an ASCII character */
 } keymap_s;
 
 extern keymap_s keymap1;

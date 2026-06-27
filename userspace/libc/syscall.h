@@ -3,39 +3,39 @@
 #include <uapi/uapi.h>
 
 /**
- * sys_ipc_send - Sends @msg to task @dst's port. Blocks while the port is full,
+ * sys_ipc_send - Sends @packet to task @dst's port. Blocks while the port is full,
  *                until space becomes available.
  * @dst: The destination task ID.
- * @msg: The message to send.
+ * @packet: The packet to send.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 sys_ipc_send(u32 dst, ipc_msg_s* msg);
+i32 sys_ipc_send(u32 dst, ipc_packet_s* packet);
 
 /**
- * sys_ipc_recv - Receives a message into @msg from the caller's port. Blocks
- *                until a message is available.
- * @msg: The output message buffer.
+ * sys_ipc_recv - Receives a packet into @packet from the caller's port. Blocks
+ *                until a packet is available.
+ * @packet: The output packet buffer.
  * Returns: E_OK on success.
  */
-i32 sys_ipc_recv(ipc_msg_s* msg);
+i32 sys_ipc_recv(ipc_packet_s* packet);
 
 /**
- * sys_ipc_call - Sends @msg to task @dst's port, then blocks until a reply is
- *                received into @msg. Requires the caller to have a reply port.
+ * sys_ipc_call - Sends @packet to task @dst's port, then blocks until a reply is
+ *                received into @packet. Requires the caller to have a reply port.
  * @dst: The destination task ID.
- * @msg: The in-out message buffer.
+ * @packet: The in-out packet buffer.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 sys_ipc_call(u32 dst, ipc_msg_s* msg);
+i32 sys_ipc_call(u32 dst, ipc_packet_s* packet);
 
 /**
- * sys_ipc_reply - Sends @msg to thread @client's reply port, waking it if it is
+ * sys_ipc_reply - Sends @packet to thread @client's reply port, waking it if it is
  *                 blocked awaiting the reply.
  * @client: The destination thread ID.
- * @msg: The message to send.
+ * @packet: The packet to send.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 sys_ipc_reply(u32 client, ipc_msg_s* msg);
+i32 sys_ipc_reply(u32 client, ipc_packet_s* packet);
 
 /**
  * sys_thread_create - Creates a new thread in the current task.

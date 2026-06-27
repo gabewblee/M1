@@ -4,8 +4,8 @@
 #include <libk/list.h>
 #include <stddef.h>
 
-typedef struct ipc_msg_s       ipc_msg_s;
-typedef struct port_s          port_s;
+typedef struct ipc_packet_s    ipc_packet_s;
+typedef struct task_port_s     task_port_s;
 typedef struct task_ctrl_blk_s task_ctrl_blk_s;
 
 typedef enum thread_state_e {
@@ -28,9 +28,9 @@ typedef struct thread_ctrl_blk_s {
     /* Task fields           */
     task_ctrl_blk_s* task;       /* Owning task                     */
     list_node_s      task_link;  /* Link in owning task list        */
-    port_s*          reply_port; /* Private reply port              */
-    ipc_msg_s*       tx_msg;     /* Pending send message            */
-    ipc_msg_s*       rx_msg;     /* Pending receive buffer          */
+    task_port_s*     reply_port; /* Private reply port              */
+    ipc_packet_s*    tx_packet;  /* Pending send packet             */
+    ipc_packet_s*    rx_packet;  /* Pending receive buffer          */
     
     /* Scheduling fields     */
     u8               priority;   /* Scheduling priority             */

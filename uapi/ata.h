@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ipc.h>
-#include <types.h>
+#include <uapi/types.h>
 
 #define ATA_SERVER_OPS(X) \
     X(1, info)            \

@@ -4,17 +4,21 @@
 #include <types.h>
 
 #define IPC_PAYLOAD_SZ 56u                                 /* IPC payload size */
-#define IPC_MSG_SZ     (sizeof(u32) * 3u + IPC_PAYLOAD_SZ) /* IPC message size */
+#define IPC_PACKET_SZ  (sizeof(u32) * 3u + IPC_PAYLOAD_SZ) /* IPC packet size  */
 
-typedef struct ipc_msg_s {
-    u32 id;                   /* Message ID         */
-    u32 sender;               /* Sender's thread ID */
-    u32 sz;                   /* Payload size       */
-    u8  data[IPC_PAYLOAD_SZ]; /* Payload data       */
-} ipc_msg_s;
+typedef struct ipc_packet_hdr_s {
+    u32 op;     /* Operation code     */
+    u32 sender; /* Sender's thread ID */
+    u32 sz;     /* Payload size       */
+} ipc_packet_hdr_s;
 
-_Static_assert(offsetof(ipc_msg_s, id)     == 0,                "Error: Invalid IPC ID offset");
-_Static_assert(offsetof(ipc_msg_s, sender) == sizeof(u32),      "Error: Invalid IPC sender offset");
-_Static_assert(offsetof(ipc_msg_s, sz)     == sizeof(u32) * 2u, "Error: Invalid IPC size offset");
-_Static_assert(offsetof(ipc_msg_s, data)   == sizeof(u32) * 3u, "Error: Invalid IPC data offset");
-_Static_assert(sizeof(ipc_msg_s)           == IPC_MSG_SZ,       "Error: Invalid IPC message size");
+typedef struct ipc_packet_s {
+    ipc_packet_hdr_s hdr;                     /* Packet header */
+    u8               payload[IPC_PAYLOAD_SZ]; /* Payload data  */
+} ipc_packet_s;
+
+_Static_assert(offsetof(ipc_packet_s, hdr.op)     == 0,                "Error: Invalid IPC op offset");
+_Static_assert(offsetof(ipc_packet_s, hdr.sender) == sizeof(u32),      "Error: Invalid IPC sender offset");
+_Static_assert(offsetof(ipc_packet_s, hdr.sz)     == sizeof(u32) * 2u, "Error: Invalid IPC size offset");
+_Static_assert(offsetof(ipc_packet_s, payload)    == sizeof(u32) * 3u, "Error: Invalid IPC payload offset");
+_Static_assert(sizeof(ipc_packet_s)               == IPC_PACKET_SZ,    "Error: Invalid IPC packet size");

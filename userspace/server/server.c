@@ -3,16 +3,16 @@
 #include <userspace/libc/syscall.h>
 #include <userspace/server/server.h>
 
-static i32 dispatch(server_s* server, ipc_msg_s* msg) {
-    if (msg->id < SERVER_OP_MAX && server->handlers[msg->id])
-        return server->handlers[msg->id](msg);
+static i32 dispatch(server_s* server, ipc_packet_s* packet) {
+    if (packet->hdr.op < SERVER_OP_MAX && server->handlers[packet->hdr.op])
+        return server->handlers[packet->hdr.op](packet);
 
-    return rep_stat_only(msg, -(i32)E_NOSYS);
+    return rep_stat_only(packet, -(i32)E_NOSYS);
 }
 
-i32 rep_stat_only(ipc_msg_s* msg, i32 status) {
-    msg->sz = sizeof(status);
-    memcpy(msg->data, &status, sizeof(status));
+i32 rep_stat_only(ipc_packet_s* packet, i32 status) {
+    packet->hdr.sz = sizeof(status);
+    memcpy(packet->payload, &status, sizeof(status));
     return status;
 }
 
@@ -22,13 +22,13 @@ void run(server_s* server) {
         sys_thread_exit(ret);
 
     for (;;) {
-        ipc_msg_s msg;
-        if (sys_ipc_recv(&msg) != E_OK)
+        ipc_packet_s packet;
+        if (sys_ipc_recv(&packet) != E_OK)
             continue;
 
-        dispatch(server, &msg);
-        if (msg.sender != 0)
-            sys_ipc_reply(msg.sender, &msg);
+        dispatch(server, &packet);
+        if (packet.hdr.sender != 0)
+            sys_ipc_reply(packet.hdr.sender, &packet);
     }
     
     server->fini();

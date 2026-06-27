@@ -13,18 +13,20 @@ static i32 call_vga_server(enum vga_server_op_e op, vga_server_req_s* req) {
     if (vga_task_id < 0)
         vga_task_id = sys_server_lookup(SERVER_ID_vga);
 
-    ipc_msg_s msg = (ipc_msg_s) {
-        .id = (u32)op,
-        .sz = (u32)sizeof(vga_server_req_s)
+    ipc_packet_s packet = (ipc_packet_s) {
+        .hdr = {
+            .op = (u32)op,
+            .sz = (u32)sizeof(vga_server_req_s)
+        }
     };
-    memcpy(msg.data, req, sizeof(vga_server_req_s));
+    memcpy(packet.payload, req, sizeof(vga_server_req_s));
 
-    i32 ret = sys_ipc_call((u32)vga_task_id, &msg);
+    i32 ret = sys_ipc_call((u32)vga_task_id, &packet);
     if (ret != E_OK)
         return ret;
 
-    if (msg.sz >= sizeof(i32))
-        memcpy(&ret, msg.data, sizeof(i32));
+    if (packet.hdr.sz >= sizeof(i32))
+        memcpy(&ret, packet.payload, sizeof(i32));
 
     return ret;
 }

@@ -1,3 +1,4 @@
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/sched.h>
 #include <kernel/core/task.h>
@@ -71,7 +72,7 @@ static thread_ctrl_blk_s* thread_create(task_ctrl_blk_s* task,
         return NULL;
     }
 
-    port_s* reply_port = port_create(1);
+    task_port_s* reply_port = port_create(1);
     if (unlikely(!reply_port)) {
         kfree(stack0);
         kfree(thread);
@@ -204,3 +205,5 @@ void __init thread0_init(void) {
     threads[0] = thread0;
     running = thread0;
 }
+
+late_initcall(thread0_init);

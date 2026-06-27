@@ -3,6 +3,7 @@
 #include <boot/multiboot.h>
 #include <config.h>
 #include <dev/console.h>
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/sched.h>
 #include <kernel/core/task.h>
@@ -17,24 +18,17 @@
 
 extern u32         magic;
 extern phys_addr_t mbi;
+extern initcall_f  sinitcall[];
+extern initcall_f  einitcall[];
+
+void __init initcalls(void) {
+    for (initcall_f* fn = sinitcall; fn < einitcall; fn++)
+        (*fn)();
+}
 
 void __noreturn kmain(void) {
     console_init();
     console_puts(ALL_FLAG, "[M1] Initialized terminal\n");
-
-    idt_init();
-    console_puts(ALL_FLAG, "[M1] Initialized IDT\n");
-
-    pic_init(0x20, 0x28);
-    console_puts(ALL_FLAG, "[M1] Initialized PIC\n");
-
-    sched_init();
-    console_puts(ALL_FLAG, "[M1] Initialized scheduler\n");
-
-    irq_init();
-    console_puts(ALL_FLAG, "[M1] Initialized interrupts\n");
-    irq_clear_mask(0);
-    __asm__ volatile ("sti");
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC)
         PANIC("Error: Invalid multiboot magic number");
@@ -43,27 +37,13 @@ void __noreturn kmain(void) {
     if(!(mbinfo->flags >> 6 & 0x1))
         PANIC("Error: Invalid mmap provided by GRUB bootloader");
 
-    pmm_init(mbinfo);
-    console_puts(ALL_FLAG, "[M1] Initialized PMM\n");
+    initcalls();
+    console_puts(ALL_FLAG, "[M1] Initialized subsystems\n");
 
-    vmm_init();
-    console_puts(ALL_FLAG, "[M1] Initialized VMM\n");
+    irq_clear_mask(0);
+    __asm__ volatile ("sti");
 
-    kheap_init();
-    console_puts(ALL_FLAG, "[M1] Initialized kernel heap\n");
-
-    ipc_init();
-    console_puts(ALL_FLAG, "[M1] Initialized IPC\n");
-
-    task0_init();
-    console_puts(ALL_FLAG, "[M1] Initialized task0\n");
-
-    thread0_init();
-    console_puts(ALL_FLAG, "[M1] Initialized thread0\n");
-
-    servers_init(mbinfo);
     console_unregister(EVGA_FLAG);
-
     pmm_free_init_section();
     for (;;) sched_yield();
 }

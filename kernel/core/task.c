@@ -1,3 +1,4 @@
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/task.h>
 #include <kernel/ipc/ipc.h>
@@ -81,3 +82,5 @@ void __init task0_init(void) {
     tasks[0] = task;
     task0 = task;
 }
+
+late_initcall(task0_init);

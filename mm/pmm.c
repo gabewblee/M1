@@ -1,6 +1,7 @@
 #include <bits.h>
 #include <boot/multiboot.h>
 #include <config.h>
+#include <kernel/core/initcall.h>
 #include <libk/string.h>
 #include <mm/page.h>
 #include <mm/pmm.h>
@@ -12,11 +13,12 @@
 static u32 bitmap[WORD_MAX_CNT];
 static u32 last;
 
-extern u8  skernel[];
-extern u8  ekernel[];
-extern u8  sinit[];
-extern u8  einit[];
-extern u32 swapper_pg_table_cnt;
+extern u8          skernel[];
+extern u8          ekernel[];
+extern u8          sinit[];
+extern u8          einit[];
+extern u32         swapper_pg_table_cnt;
+extern phys_addr_t mbi;
 
 static __always_inline void __hot bitmap_mark_bit(u32 bit) {
     u32 word = BIT_TO_WORD(bit), mask = BIT(bit & 31);
@@ -190,3 +192,9 @@ void __init pmm_init(multiboot_info_t* mbinfo) {
         }
     }
 }
+
+static void __init pmm_initcall(void) {
+    pmm_init((multiboot_info_t*)__va(mbi));
+}
+
+core_initcall(pmm_initcall);

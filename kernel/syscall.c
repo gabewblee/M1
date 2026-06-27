@@ -51,20 +51,20 @@ SYSCALLS(SYSCALL_FWD_DECL)
 #define SYSCALL_ARGS_4(frm) (frm)->ebx, (frm)->ecx, (frm)->edx, (frm)->esi
 #define SYSCALL_ARGS_5(frm) (frm)->ebx, (frm)->ecx, (frm)->edx, (frm)->esi, (frm)->edi
 
-static i32 sys_ipc_send(u32 dst, u32 msg) {
-    return ipc_send(dst, (ipc_msg_s*)msg);
+static i32 sys_ipc_send(u32 dst, u32 packet) {
+    return ipc_send(dst, (ipc_packet_s*)packet);
 }
 
-static i32 sys_ipc_recv(u32 msg) {
-    return ipc_recv((ipc_msg_s*)msg);
+static i32 sys_ipc_recv(u32 packet) {
+    return ipc_recv((ipc_packet_s*)packet);
 }
 
-static i32 sys_ipc_call(u32 dst, u32 msg) {
-    return ipc_call(dst, (ipc_msg_s*)msg);
+static i32 sys_ipc_call(u32 dst, u32 packet) {
+    return ipc_call(dst, (ipc_packet_s*)packet);
 }
 
-static i32 sys_ipc_reply(u32 client, u32 msg) {
-    return ipc_reply(client, (ipc_msg_s*)msg);
+static i32 sys_ipc_reply(u32 client, u32 packet) {
+    return ipc_reply(client, (ipc_packet_s*)packet);
 }
 
 static i32 sys_thread_create(u32 entry, u32 priority) {

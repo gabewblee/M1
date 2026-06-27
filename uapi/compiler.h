@@ -2,6 +2,7 @@
 
 #define __multiboot            __attribute__((__section__(".multiboot"))) /* Places the function in the .multiboot section   */
 #define __init                 __attribute__((__section__(".init")))      /* Places the function in the .init section        */
+#define __init_data            __attribute__((__section__(".init")))      /* Places the data in the .init section            */
 
 #define __noreturn             __attribute__((__noreturn__))              /* Function does not return                        */
 #define __hot                  __attribute__((__hot__))                   /* Function is in a hot path                       */

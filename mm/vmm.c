@@ -2,6 +2,7 @@
 #include <bits.h>
 #include <boot/setup.h>
 #include <config.h>
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/sync/spinlock.h>
 #include <libk/string.h>
@@ -288,3 +289,5 @@ void __init vmm_init(void) {
     /* Register page fault handler */
     idt_register_handler(14, vmm_pg_fault_handler);
 }
+
+core_initcall(vmm_init);

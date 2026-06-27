@@ -32,9 +32,9 @@ KERNEL_SRCS     = arch/x86/idt.c       \
                   kernel/syscall.c     \
                   libk/string.c        \
                   loader/loader.c      \
-                  mm/kheap.c           \
                   mm/pmm.c             \
-                  mm/vmm.c
+                  mm/vmm.c             \
+                  mm/kheap.c
 KERNEL_ASMS     = arch/x86/isr.asm \
 	   	          boot/boot.asm    \
        		      kernel/core/switch.asm

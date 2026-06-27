@@ -11,17 +11,17 @@ const server_handler_f kbd_handlers[SERVER_OP_MAX] = {
     KBD_SERVER_OPS(SERVER_OP_ENTRY)
 };
 
-static i32 handle_read(ipc_msg_s* msg) {
+static i32 handle_read(ipc_packet_s* packet) {
     kbd_event_s event;
     ps2_kbd_read(&event);
     
-    kbd_server_reply_s* rep = (kbd_server_reply_s*)msg->data;
+    kbd_server_reply_s* rep = (kbd_server_reply_s*)packet->payload;
     *rep = (kbd_server_reply_s) {
         .ret   = E_OK,
         .event = event
     };
 
-    msg->sz = sizeof(kbd_server_reply_s);
+    packet->hdr.sz = sizeof(kbd_server_reply_s);
     return rep->ret;
 }
 

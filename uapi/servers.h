@@ -2,17 +2,11 @@
 
 #include <types.h>
 
-/* X(id, name) */
-#define SERVERS(X) \
-    X(0, vga)      \
-    X(1, keyboard) \
-    X(2, ata)
-
 typedef enum server_id_e {
-#define SERVER_ID_ENUM(id, name) SERVER_ID_##name = (id),
-    SERVERS(SERVER_ID_ENUM)
-#undef SERVER_ID_ENUM
-    SERVER_ID_CNT,
+    SERVER_ID_vga      = 0,
+    SERVER_ID_keyboard = 1,
+    SERVER_ID_ata      = 2,
+    SERVER_ID_CNT      = 3,
 } server_id_e;
 
 #define SERVER_NOTE_TYPE 0x4D315256u /* "M1RV" */

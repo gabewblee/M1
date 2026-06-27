@@ -1,4 +1,5 @@
 #include <arch/x86/pic.h>
+#include <kernel/core/initcall.h>
 #include <uapi/io.h>
 
 static u16 get_irq_reg(int ocw3) {
@@ -90,3 +91,9 @@ u16 pic_get_isr(void) {
 void __init pic_init(u8 offset1, u8 offset2) {
     pic_remap(offset1, offset2);
 }
+
+static void __init pic_initcall(void) {
+    pic_init(0x20, 0x28);
+}
+
+early_initcall(pic_initcall);

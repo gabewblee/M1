@@ -1,4 +1,5 @@
 #include <arch/x86/idt.h>
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/sched.h>
 #include <kernel/core/thread.h>
@@ -123,3 +124,5 @@ void __init sched_init(void) {
     /* Register PIT timer IRQ handler */
     idt_register_handler(PIC_TO_INT(0), sched_pit_handler);
 }
+
+subsys_initcall(sched_init);

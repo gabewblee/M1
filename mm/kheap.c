@@ -1,4 +1,5 @@
 #include <bits.h>
+#include <kernel/core/initcall.h>
 #include <libk/string.h>
 #include <libk/list.h>
 #include <mm/kheap.h>
@@ -163,3 +164,5 @@ void __init kheap_init(void) {
     blk_init(hdr, kheap_sz, true);
     add_to_free_list(hdr);
 }
+
+core_initcall(kheap_init);

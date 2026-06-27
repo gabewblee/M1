@@ -1,5 +1,6 @@
 #include <bits.h>
 #include <boot/multiboot.h>
+#include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/task.h>
 #include <kernel/core/thread.h>
@@ -30,6 +31,8 @@ typedef struct server_info_s {
 static spinlock_s    lk;
 static virt_addr_t   nxt_stack_top = HIGHER_HALF_OFFSET;
 static server_info_s servers[SERVER_ID_CNT];
+
+extern phys_addr_t mbi;
 
 static void map_range(phys_addr_t start, phys_addr_t end) {
     for (phys_addr_t paddr = ALIGN_DOWN_TO(start, PG_SZ); paddr < ALIGN_UP_TO(end, PG_SZ); paddr += PG_SZ)
@@ -154,3 +157,9 @@ void servers_init(multiboot_info_t* mbinfo) {
         server_thread_create(task, entry, user_stack_top, server->iopl, server->priority);
     }
 }
+
+static void __init servers_initcall(void) {
+    servers_init((multiboot_info_t*)__va(mbi));
+}
+
+late_initcall(servers_initcall);

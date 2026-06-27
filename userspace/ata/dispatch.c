@@ -42,9 +42,9 @@ static void print_drv_info(u32 idx, ata_drv_s* drv) {
     printf("  Total sectors: %d\n",     drv->lba48 ? drv->total48 : drv->total28);
 }
 
-static i32 handle_info(ipc_msg_s* msg) {
+static i32 handle_info(ipc_packet_s* packet) {
     ata_server_reply_s rep = {0};
-    ata_server_req_s* req = (ata_server_req_s*)msg->data;
+    ata_server_req_s* req = (ata_server_req_s*)packet->payload;
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
     if (!drv) {
@@ -58,13 +58,13 @@ static i32 handle_info(ipc_msg_s* msg) {
         rep.info.sectors = drv->lba48 ? drv->total48 : drv->total28;
     }
 
-    msg->sz = (u32)sizeof(rep);
-    memcpy(msg->data, &rep, sizeof(rep));
+    packet->hdr.sz = (u32)sizeof(rep);
+    memcpy(packet->payload, &rep, sizeof(rep));
     return rep.ret;
 }
 
-static i32 handle_read(ipc_msg_s* msg) {
-    ata_server_req_s* req = (ata_server_req_s*)msg->data;
+static i32 handle_read(ipc_packet_s* packet) {
+    ata_server_req_s* req = (ata_server_req_s*)packet->payload;
     ata_server_reply_s rep = {0};
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
@@ -75,13 +75,13 @@ static i32 handle_read(ipc_msg_s* msg) {
         rep.done = (rep.ret == E_OK) ? req->cnt : 0;
     }
 
-    msg->sz = (u32)sizeof(rep);
-    memcpy(msg->data, &rep, sizeof(rep));
+    packet->hdr.sz = (u32)sizeof(rep);
+    memcpy(packet->payload, &rep, sizeof(rep));
     return rep.ret;
 }
 
-static i32 handle_write(ipc_msg_s* msg) {
-    ata_server_req_s* req = (ata_server_req_s*)msg->data;
+static i32 handle_write(ipc_packet_s* packet) {
+    ata_server_req_s* req = (ata_server_req_s*)packet->payload;
     ata_server_reply_s rep = {0};
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
@@ -92,8 +92,8 @@ static i32 handle_write(ipc_msg_s* msg) {
         rep.done = (rep.ret == E_OK) ? req->cnt : 0;
     }
 
-    msg->sz = (u32)sizeof(rep);
-    memcpy(msg->data, &rep, sizeof(rep));
+    packet->hdr.sz = (u32)sizeof(rep);
+    memcpy(packet->payload, &rep, sizeof(rep));
     return rep.ret;
 }
 

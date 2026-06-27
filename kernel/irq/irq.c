@@ -1,6 +1,7 @@
 #include <arch/x86/idt.h>
 #include <arch/x86/pic.h>
 #include <config.h>
+#include <kernel/core/initcall.h>
 #include <kernel/core/sched.h>
 #include <kernel/core/thread.h>
 #include <kernel/irq/irq.h>
@@ -43,3 +44,5 @@ void __init irq_init(void) {
     for (u8 irq = 0; irq < IDT_IRQ_CNT; irq++)
         list_init(&waiters[irq]);
 }
+
+subsys_initcall(irq_init);
