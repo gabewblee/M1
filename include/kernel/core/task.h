@@ -5,17 +5,14 @@
 
 #define KERNEL_TASK_ID 0u
 
-typedef struct task_port_s task_port_s;
-
 typedef struct task_ctrl_blk_s {
     /* Task fields   */
-    u32          id;       /* Task ID                         */
-    phys_addr_t  cr3;      /* Page directory physical address */
-    task_port_s* port;     /* IPC port for packet passing     */
+    u32         id;       /* Task ID                         */
+    phys_addr_t cr3;      /* Page directory physical address */
 
     /* Thread fields */
-    u32          nthreads; /* Thread list count               */
-    list_node_s  threads;  /* Thread list head                */
+    u32         nthreads; /* Thread list count               */
+    list_node_s threads;  /* Thread list head                */
 } task_ctrl_blk_s;
 
 /**

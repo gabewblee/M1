@@ -10,11 +10,11 @@
     X(3, write)           \
     X(4, clear)
 
-enum vga_server_op_e {
+typedef enum vga_server_op_e {
 #define VGA_SERVER_OP_ENUM(id, name) VGA_SERVER_OP_##name = (id),
     VGA_SERVER_OPS(VGA_SERVER_OP_ENUM)
 #undef VGA_SERVER_OP_ENUM
-};
+} vga_server_op_e;
 
 typedef struct vga_server_req_s {
     u8   len;                              /* Buffer length                      */

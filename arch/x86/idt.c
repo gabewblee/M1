@@ -4,11 +4,12 @@
 #include <kernel/core/panic.h>
 #include <stddef.h>
 
-#define ISR_STUB_SZ      15     /* ISR stub size    */
+#define ISR_STUB_SZ      15     /* ISR stub size       */
 #define IDT_INT_FLAG     0xE    /* Interrupt gate flag */
-#define IDT_DPL0_FLAG    0 << 5 /* DPL0 flag        */
-#define IDT_DPL3_FLAG    3 << 5 /* DPL3 flag        */
-#define IDT_PRESENT_FLAG 1 << 7 /* Present flag     */
+#define IDT_DPL0_FLAG    0 << 5 /* DPL0 flag           */
+#define IDT_DPL3_FLAG    3 << 5 /* DPL3 flag           */
+#define IDT_PRESENT_FLAG 1 << 7 /* Present flag        */
+#define IDT_SYSCALL_VEC  0x80   /* Syscall vector      */
 
 typedef struct idt_entry_s {
     u16 isr_low;    /* Bits 0-15 of interrupt handler address        */
@@ -24,22 +25,21 @@ typedef struct idtr_s {
 } __packed idtr_s;
 
 __aligned(0x10)
-static idt_entry_s   idt[IDT_INT_MAX_CNT];
-static idtr_s        idtr;
-static int_handler_f handlers[IDT_EXC_CNT + IDT_IRQ_CNT];
+static idt_entry_s idt[IDT_INT_MAX_CNT];
+static ihandler_f  ihandlers[IDT_EXC_CNT + IDT_IRQ_CNT];
 
 extern u8 gdt_start[];
 extern u8 gdt_kernel_code_seg_desc[];
 extern u8 isr_stub_base[];
 extern u8 syscall_stub[];
 
-static inline idt_entry_s set_desc(virt_addr_t handler, u8 attr) {
-    return (idt_entry_s) {
-        .isr_low    = handler & 0xFFFF,
+static inline idt_entry_s set_idt_entry(virt_addr_t ihandler, u8 attr) {
+    return (idt_entry_s){
+        .isr_low    = ihandler & 0xFFFF,
         .segment    = gdt_kernel_code_seg_desc - gdt_start,
         .reserved   = 0,
         .attributes = attr,
-        .isr_high   = handler >> 16,
+        .isr_high   = ihandler >> 16,
     };
 }
 
@@ -47,21 +47,21 @@ static inline virt_addr_t get_isr_stub(u8 vec) {
     return (virt_addr_t)(isr_stub_base + vec * ISR_STUB_SZ);
 }
 
-void idt_register_handler(u8 vec, int_handler_f handler) {
+void idt_register_handler(u8 vec, ihandler_f ihandler) {
     if (unlikely(vec >= IDT_EXC_CNT + IDT_IRQ_CNT))
         return;
 
-    handlers[vec] = handler;
+    ihandlers[vec] = ihandler;
 }
 
 void idt_unregister_handler(u8 vec) {
     if (unlikely(vec >= IDT_EXC_CNT + IDT_IRQ_CNT))
         return;
 
-    handlers[vec] = NULL;
+    ihandlers[vec] = NULL;
 }
 
-void int_handler(int_frm_s* frm) {
+void ihandler(ifrm_s* frm) {
     if (unlikely(!frm))
         return;
 
@@ -69,31 +69,31 @@ void int_handler(int_frm_s* frm) {
     if (unlikely(vec >= IDT_EXC_CNT + IDT_IRQ_CNT))
         return;
 
-    int_handler_f handler = handlers[vec];
-    if (unlikely(!handler))
+    ihandler_f ihandler = ihandlers[vec];
+    if (unlikely(!ihandler))
         return;
 
-    handler(frm);
+    ihandler(frm);
     if (IDT_EXC_CNT <= vec && vec < IDT_EXC_CNT + IDT_IRQ_CNT)
         pic_send_eoi(vec - IDT_EXC_CNT);
 }
 
 void __init idt_init(void) {
     /* Initializes IDT register */
-    idtr = (idtr_s) {
+    idtr_s idtr = (idtr_s) {
         .limit = (u16)(sizeof(idt_entry_s) * IDT_INT_MAX_CNT - 1),
         .base  = (virt_addr_t)idt
     };
 
-    /* Initializes exception and PIC IRQ handlers */
+    /* Initializes exception and PIC IRQ ihandlers */
     for (u8 vec = 0; vec < IDT_EXC_CNT + IDT_IRQ_CNT; vec++)
-        idt[vec] = set_desc(get_isr_stub(vec), IDT_INT_FLAG | IDT_DPL0_FLAG | IDT_PRESENT_FLAG);
+        idt[vec] = set_idt_entry(get_isr_stub(vec), IDT_INT_FLAG | IDT_DPL0_FLAG | IDT_PRESENT_FLAG);
 
-    /* Initializes syscall handler */
-    idt[0x80] = set_desc((virt_addr_t)syscall_stub, IDT_INT_FLAG | IDT_DPL3_FLAG | IDT_PRESENT_FLAG);
+    /* Initializes syscall ihandler */
+    idt[IDT_SYSCALL_VEC] = set_idt_entry((virt_addr_t)syscall_stub, IDT_INT_FLAG | IDT_DPL3_FLAG | IDT_PRESENT_FLAG);
 
     /* Loads the IDT */
     __asm__ volatile("lidt %0" : : "m"(idtr));
 }
 
-early_initcall(idt_init);
+arch_initcall(idt_init);

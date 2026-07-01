@@ -165,4 +165,4 @@ void __init kheap_init(void) {
     add_to_free_list(hdr);
 }
 
-core_initcall(kheap_init);
+mm_initcall(kheap_init);

@@ -21,8 +21,7 @@ static i32 handle_read(ipc_packet_s* packet) {
         .event = event
     };
 
-    packet->hdr.sz = sizeof(kbd_server_reply_s);
-    return rep->ret;
+    return (i32)sizeof(kbd_server_reply_s);
 }
 
 i32 init(void) {

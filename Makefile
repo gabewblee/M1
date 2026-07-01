@@ -1,7 +1,7 @@
 NASM 	       = nasm
 I686_ELF_GCC   = i686-elf-gcc
 I686_ELF_LD    = i686-elf-ld
-CFLAGS 	       = -ffreestanding -O0 -nostdlib -g
+CFLAGS 	       = -ffreestanding -O0 -nostdlib -g -MMD -MP
 KERNEL_CFLAGS  = $(CFLAGS) -I. -Iinclude -Iuapi
 USER_CFLAGS    = $(CFLAGS) -I. -Iuserspace/libc -Iuserspace/server -Iuserspace/ata -Iuapi
 KERNEL_LDFLAGS = -T boot/linker.ld --no-warn-rwx-segments
@@ -9,31 +9,34 @@ USER_LDFLAGS   = -T userspace/startup/linker.ld --no-warn-rwx-segments
 ATA_IMG        = build/ata.img
 ATA_IMG_SZ     = 64
 
-.PHONY: all clean run
+.PHONY: all clean run test
 
 #----------------------------------------------------------------------------------------------------
 # Kernel files
 #----------------------------------------------------------------------------------------------------
 
-KERNEL_SRCS     = arch/x86/idt.c       \
-                  arch/x86/pic.c       \
-                  boot/setup.c         \
-                  dev/console.c        \
-                  dev/evga.c           \
-                  dev/klog.c           \
-                  kernel/core/panic.c  \
-                  kernel/core/sched.c  \
-                  kernel/core/task.c   \
-                  kernel/core/thread.c \
-                  kernel/ipc/ipc.c     \
-                  kernel/ipc/servers.c \
-                  kernel/irq/irq.c     \
-                  kernel/kernel.c      \
-                  kernel/syscall.c     \
-                  libk/string.c        \
-                  loader/loader.c      \
-                  mm/pmm.c             \
-                  mm/vmm.c             \
+KERNEL_SRCS     = arch/x86/idt.c                 \
+                  arch/x86/pic.c                 \
+                  boot/setup.c                   \
+                  dev/console.c                  \
+                  dev/evga.c                     \
+                  dev/klog.c                     \
+                  dev/serial.c                   \
+                  kernel/core/panic.c            \
+                  kernel/core/sched.c            \
+                  kernel/core/task.c             \
+                  kernel/core/thread.c           \
+                  kernel/capability/capability.c \
+                  kernel/capability/endpoint.c   \
+                  kernel/capability/invoke.c     \
+                  kernel/capability/bootstrap.c  \
+                  kernel/irq/irq.c               \
+                  kernel/kernel.c                \
+                  kernel/syscall.c               \
+                  libk/string.c                  \
+                  loader/loader.c                \
+                  mm/pmm.c                       \
+                  mm/vmm.c                       \
                   mm/kheap.c
 KERNEL_ASMS     = arch/x86/isr.asm \
 	   	          boot/boot.asm    \
@@ -47,8 +50,9 @@ KERNEL_TARGET   = build/boot/m1.elf
 # User files
 #----------------------------------------------------------------------------------------------------
 
-LIBC_SRCS = userspace/libc/stdio.c  \
-            userspace/libc/string.c \
+LIBC_SRCS = userspace/libc/capability.c \
+            userspace/libc/stdio.c      \
+            userspace/libc/string.c     \
             userspace/libc/syscall.c
 LIBC_OBJS = $(LIBC_SRCS:%.c=build/%.o)
 
@@ -77,6 +81,11 @@ VGA_TARGET = build/userspace/vga/vga.elf
 STARTUP_ASMS      = userspace/startup/crt0.asm
 STARTUP_ASMS_OBJS = $(STARTUP_ASMS:%.asm=build/%.o)
 
+ROOT_SRCS   = userspace/root/main.c
+ROOT_C_OBJS = $(ROOT_SRCS:%.c=build/%.o)
+ROOT_OBJS   = $(LIBC_OBJS) $(ROOT_C_OBJS) $(STARTUP_ASMS_OBJS)
+ROOT_TARGET = build/userspace/root/root.elf
+
 ATA_SRCS   = userspace/ata/driver.c   \
              userspace/ata/dispatch.c \
              userspace/ata/main.c     \
@@ -85,16 +94,16 @@ ATA_C_OBJS = $(ATA_SRCS:%.c=build/%.o)
 ATA_OBJS   = $(LIBC_OBJS) $(SERVER_OBJS) $(ATA_C_OBJS) $(STARTUP_ASMS_OBJS)
 ATA_TARGET = build/userspace/ata/ata.elf
 
-ISO = iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf
+ISO = iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf iso/boot/root.elf
 
 #----------------------------------------------------------------------------------------------------
 # Build targets
 #----------------------------------------------------------------------------------------------------
 
-all: $(ATA_TARGET) $(KERNEL_TARGET) $(PS2_TARGET) $(VGA_TARGET)
+all: $(ATA_TARGET) $(KERNEL_TARGET) $(PS2_TARGET) $(VGA_TARGET) $(ROOT_TARGET)
 
 clean:
-	rm -rf build/* iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf
+	rm -rf build/* iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf iso/boot/root.elf
 
 run: iso/boot/grub/grub.cfg $(ISO)
 	@mkdir -p build
@@ -103,6 +112,17 @@ run: iso/boot/grub/grub.cfg $(ISO)
 	fi
 	grub-mkrescue -o build/m1.iso iso
 	qemu-system-i386 -cdrom build/m1.iso -drive file=$(ATA_IMG),format=raw,if=ide,index=0,media=disk
+
+test: iso/boot/grub/grub.cfg $(ISO)
+	@mkdir -p build
+	@if [ ! -f $(ATA_IMG) ]; then                                                \
+        dd if=/dev/zero of=$(ATA_IMG) bs=1M count=$(ATA_IMG_SZ) >/dev/null 2>&1; \
+	fi
+	@grub-mkrescue -o build/m1.iso iso >/dev/null 2>&1
+	@rm -f build/serial.log
+	-@timeout 8 qemu-system-i386 -cdrom build/m1.iso -drive file=$(ATA_IMG),format=raw,if=ide,index=0,media=disk \
+        -serial file:build/serial.log -display none -monitor none -no-reboot </dev/null >/dev/null 2>&1
+	@cat build/serial.log
 
 $(ATA_TARGET): $(ATA_OBJS)
 	@mkdir -p $(dir $@) iso/boot
@@ -124,7 +144,12 @@ $(VGA_TARGET): $(VGA_OBJS)
 	$(I686_ELF_LD) $(USER_LDFLAGS) $(VGA_OBJS) -o $@
 	cp $@ iso/boot/vga.elf
 
-$(ATA_C_OBJS) $(LIBC_OBJS) $(PS2_C_OBJS) $(SERVER_OBJS) $(VGA_C_OBJS): build/%.o: %.c
+$(ROOT_TARGET): $(ROOT_OBJS)
+	@mkdir -p $(dir $@) iso/boot
+	$(I686_ELF_LD) $(USER_LDFLAGS) $(ROOT_OBJS) -o $@
+	cp $@ iso/boot/root.elf
+
+$(ATA_C_OBJS) $(LIBC_OBJS) $(PS2_C_OBJS) $(SERVER_OBJS) $(VGA_C_OBJS) $(ROOT_C_OBJS): build/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(I686_ELF_GCC) $(USER_CFLAGS) -c $< -o $@
 
@@ -135,3 +160,7 @@ $(KERNEL_C_OBJS): build/%.o: %.c
 build/%.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) -f elf32 -I. -Iinclude $< -o $@
+
+DEPS = $(KERNEL_C_OBJS:.o=.d) $(LIBC_OBJS:.o=.d) $(SERVER_OBJS:.o=.d) \
+       $(PS2_C_OBJS:.o=.d) $(VGA_C_OBJS:.o=.d) $(ATA_C_OBJS:.o=.d) $(ROOT_C_OBJS:.o=.d)
+-include $(DEPS)

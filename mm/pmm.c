@@ -17,6 +17,8 @@ extern u8          skernel[];
 extern u8          ekernel[];
 extern u8          sinit[];
 extern u8          einit[];
+extern u8          skheap[];
+extern u8          ekheap[];
 extern u32         swapper_pg_table_cnt;
 extern phys_addr_t mbi;
 
@@ -168,6 +170,13 @@ void __init pmm_init(multiboot_info_t* mbinfo) {
     /* Reserve kernel and swapper page tables */
     bitmap_mark_range(__pa(skernel), (u32)(ekernel - skernel) + swapper_pg_table_cnt * PG_SZ);
 
+    /* Reserve the physical frames whose higher-half linear addresses fall inside
+       the kheap window. The kheap backs its window with arbitrary demand-paged
+       frames, so these phantom frames are otherwise free; reserving them keeps
+       __va(pa) usable for memory mapped linearly (untyped, boot modules) without
+       aliasing live kheap page tables. */
+    bitmap_mark_range(__pa(skheap), (u32)(ekheap - skheap));
+
     /* Reserve multiboot metadata */
     bitmap_mark_range(__pa(mbinfo), sizeof(multiboot_info_t));
     if (mbinfo->flags & MULTIBOOT_INFO_CMDLINE)
@@ -197,4 +206,4 @@ static void __init pmm_initcall(void) {
     pmm_init((multiboot_info_t*)__va(mbi));
 }
 
-core_initcall(pmm_initcall);
+mm_initcall(pmm_initcall);

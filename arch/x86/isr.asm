@@ -4,14 +4,14 @@ bits 32
 %define IDT_IRQ_CNT     16
 %define IDT_STUB_STRIDE 15
 
-extern int_handler
+extern ihandler
 extern syscall_handler
 
 isr_handler_common:
     pushad
     cld
     push esp
-    call int_handler
+    call ihandler
     add esp, 4
     popad
     add esp, 8

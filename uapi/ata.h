@@ -8,19 +8,19 @@
     X(2, read)            \
     X(3, write)
 
-enum ata_server_op_e {
+typedef enum ata_server_op_e {
 #define ATA_SERVER_OP_ENUM(id, name) ATA_SERVER_OP_##name = (id),
     ATA_SERVER_OPS(ATA_SERVER_OP_ENUM)
 #undef ATA_SERVER_OP_ENUM
-};
+} ata_server_op_e;
 
-enum ata_kind_e {
+typedef enum ata_kind_e {
     ATA_KIND_NONE   = 0,
     ATA_KIND_PATA   = 1,
     ATA_KIND_PATAPI = 2,
     ATA_KIND_SATA   = 3,
     ATA_KIND_SATAPI = 4
-};
+} ata_kind_e;
 
 typedef struct ata_server_req_s {
     u8  drv;   /* Drive index                     */

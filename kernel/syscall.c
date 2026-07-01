@@ -1,38 +1,31 @@
 #include <config.h>
-#include <dev/klog.h>
+#include <dev/console.h>
+#include <kernel/capability/capability.h>
+#include <kernel/capability/endpoint.h>
+#include <kernel/capability/invoke.h>
 #include <kernel/core/sched.h>
-#include <kernel/core/task.h>
 #include <kernel/core/thread.h>
-#include <kernel/ipc/ipc.h>
-#include <kernel/ipc/servers.h>
-#include <kernel/irq/irq.h>
 #include <kernel/syscall.h>
-#include <libk/string.h>
-#include <mm/page.h>
-#include <mm/vmm.h>
 #include <kernel/uaccess.h>
+#include <uapi/capability.h>
 #include <uapi/errno.h>
 #include <uapi/ipc.h>
 #include <uapi/syscall.h>
 
-#define SYSCALLS(X)                                      \
-    X(SYS_ipc_send,             ipc_send,             2) \
-    X(SYS_ipc_recv,             ipc_recv,             1) \
-    X(SYS_ipc_call,             ipc_call,             2) \
-    X(SYS_ipc_reply,            ipc_reply,            2) \
-    X(SYS_thread_create,        thread_create,        2) \
-    X(SYS_thread_yield,         thread_yield,         0) \
-    X(SYS_thread_exit,          thread_exit,          1) \
-    X(SYS_map_pg,               map_pg,               3) \
-    X(SYS_unmap_pg,             unmap_pg,             1) \
-    X(SYS_vm_alloc_range,       vm_alloc_range,       2) \
-    X(SYS_vm_free_range,        vm_free_range,        2) \
-    X(SYS_log_read,             log_read,             3) \
-    X(SYS_server_lookup,        server_lookup,        1) \
-    X(SYS_irq_register_handler, irq_register_handler, 1) \
-    X(SYS_irq_wait_for,         irq_wait_for,         1) \
-    X(SYS_vm_copy,              vm_copy,              5) \
-    X(SYS_max,                  max,                  0)
+#define SYSCALLS(X)                       \
+    X(SYS_send,        send,        4)    \
+    X(SYS_nbsend,      nbsend,      4)    \
+    X(SYS_call,        call,        4)    \
+    X(SYS_recv,        recv,        5)    \
+    X(SYS_nbrecv,      nbrecv,      5)    \
+    X(SYS_reply,       reply,       3)    \
+    X(SYS_replyrecv,   replyrecv,   5)    \
+    X(SYS_signal,      signal,      1)    \
+    X(SYS_wait,        wait,        2)    \
+    X(SYS_yield,       yield,       0)    \
+    X(SYS_thread_exit, thread_exit, 1)    \
+    X(SYS_dbg_puts,    dbg_puts,    2)    \
+    X(SYS_max,         max,         0)
 
 #define SYSCALL_DECL_0(name) static i32 sys_##name(void)
 #define SYSCALL_DECL_1(name) static i32 sys_##name(u32)
@@ -51,31 +44,85 @@ SYSCALLS(SYSCALL_FWD_DECL)
 #define SYSCALL_ARGS_4(frm) (frm)->ebx, (frm)->ecx, (frm)->edx, (frm)->esi
 #define SYSCALL_ARGS_5(frm) (frm)->ebx, (frm)->ecx, (frm)->edx, (frm)->esi, (frm)->edi
 
-static i32 sys_ipc_send(u32 dst, u32 packet) {
-    return ipc_send(dst, (ipc_packet_s*)packet);
+static i32 sys_send(u32 cptr, u32 mi, u32 packet, u32 grant_cptr) {
+    return ipc_send(&thread_self()->cspace_root, cptr, mi, (ipc_packet_s*)packet, grant_cptr, false);
 }
 
-static i32 sys_ipc_recv(u32 packet) {
-    return ipc_recv((ipc_packet_s*)packet);
+static i32 sys_nbsend(u32 cptr, u32 mi, u32 packet, u32 grant_cptr) {
+    return ipc_send(&thread_self()->cspace_root, cptr, mi, (ipc_packet_s*)packet, grant_cptr, true);
 }
 
-static i32 sys_ipc_call(u32 dst, u32 packet) {
-    return ipc_call(dst, (ipc_packet_s*)packet);
+static i32 sys_call(u32 cptr, u32 mi, u32 packet, u32 grant_cptr) {
+    thread_ctrl_blk_s* cur = thread_self();
+    const capability_s* root = &cur->cspace_root;
+
+    cte_s* slot = capability_lookup(root, cptr, capability_depth(root));
+    if (unlikely(!slot))
+        return -(i32)E_INVAL;
+
+    if (slot->capability.type == CAPABILITY_TYPE_ENDPOINT)
+        return ipc_call(root, cptr, mi, (ipc_packet_s*)packet, grant_cptr);
+
+    u32 args[CAPABILITY_INVOKE_ARGC] = {0};
+    if (packet) {
+        i32 ret = copy_from_user(cur->cr3, args, (void*)packet, sizeof(args));
+        if (unlikely(ret != E_OK))
+            return ret;
+    }
+
+    return capability_invoke(cur, slot, get_msg_label((msg_info_t)mi), args, CAPABILITY_INVOKE_ARGC);
 }
 
-static i32 sys_ipc_reply(u32 client, u32 packet) {
-    return ipc_reply(client, (ipc_packet_s*)packet);
+static i32 recv_common(u32 cptr, u32 reply_cptr, u32 packet, u32 ubadge, u32 recv_slot, bool nonblock) {
+    thread_ctrl_blk_s* cur = thread_self();
+    u32 badge = 0;
+
+    i32 ret = ipc_recv(&cur->cspace_root, cptr, reply_cptr, (ipc_packet_s*)packet, &badge, recv_slot, nonblock);
+    if (ret >= 0 && ubadge)
+        copy_to_user(cur->cr3, (void*)ubadge, &badge, sizeof(badge));
+
+    return ret;
 }
 
-static i32 sys_thread_create(u32 entry, u32 priority) {
-    thread_ctrl_blk_s* thread = kernel_thread_create(
-        thread_self()->task, (virt_addr_t)entry, (u8)priority
-    );
-
-    return thread ? thread->id : -(i32)E_NOMEM;
+static i32 sys_recv(u32 cptr, u32 reply_cptr, u32 packet, u32 ubadge, u32 recv_slot) {
+    return recv_common(cptr, reply_cptr, packet, ubadge, recv_slot, false);
 }
 
-static i32 sys_thread_yield(void) {
+static i32 sys_nbrecv(u32 cptr, u32 reply_cptr, u32 packet, u32 ubadge, u32 recv_slot) {
+    return recv_common(cptr, reply_cptr, packet, ubadge, recv_slot, true);
+}
+
+static i32 sys_reply(u32 reply_cptr, u32 mi, u32 packet) {
+    return ipc_reply(&thread_self()->cspace_root, reply_cptr, mi, (ipc_packet_s*)packet);
+}
+
+static i32 sys_replyrecv(u32 cptr, u32 reply_cptr, u32 mi, u32 packet, u32 ubadge) {
+    thread_ctrl_blk_s* cur = thread_self();
+    u32 badge = 0;
+
+    i32 ret = ipc_replyrecv(&cur->cspace_root, cptr, reply_cptr, mi, (ipc_packet_s*)packet, &badge);
+    if (ret >= 0 && ubadge)
+        copy_to_user(cur->cr3, (void*)ubadge, &badge, sizeof(badge));
+
+    return ret;
+}
+
+static i32 sys_signal(u32 cptr) {
+    return ipc_signal(&thread_self()->cspace_root, cptr);
+}
+
+static i32 sys_wait(u32 cptr, u32 ubadge) {
+    thread_ctrl_blk_s* cur = thread_self();
+    u32 badge = 0;
+
+    i32 ret = ipc_wait(&cur->cspace_root, cptr, &badge);
+    if (ret == E_OK && ubadge)
+        copy_to_user(cur->cr3, (void*)ubadge, &badge, sizeof(badge));
+
+    return ret;
+}
+
+static i32 sys_yield(void) {
     sched_yield();
     return E_OK;
 }
@@ -86,56 +133,17 @@ static i32 sys_thread_exit(u32 code) {
     __builtin_unreachable();
 }
 
-static i32 sys_map_pg(u32 vaddr, u32 paddr, u32 flags) {
-    vmm_map_pg((phys_addr_t)paddr, (virt_addr_t)vaddr, flags);
-    return E_OK;
-}
+static i32 sys_dbg_puts(u32 ustr, u32 len) {
+    thread_ctrl_blk_s* cur = thread_self();
+    char kbuf[129];
+    if (len > sizeof(kbuf) - 1)
+        len = sizeof(kbuf) - 1;
 
-static i32 sys_unmap_pg(u32 vaddr) {
-    vmm_unmap_pg((virt_addr_t)vaddr);
-    return E_OK;
-}
+    if (len && copy_from_user(cur->cr3, kbuf, (void*)ustr, len) != E_OK)
+        return -(i32)E_FAULT;
 
-static i32 sys_vm_alloc_range(u32 vaddr, u32 len) {
-    (void)vaddr; (void)len;
-    return -(i32)E_NOSYS;
-}
-
-static i32 sys_vm_free_range(u32 vaddr, u32 len) {
-    (void)vaddr; (void)len;
-    return -(i32)E_NOSYS;
-}
-
-static i32 sys_log_read(u32 dst, u32 len, u32 off) {
-    return (i32)klog_read((char*)dst, (size_t)len, (size_t)off);
-}
-
-static i32 sys_server_lookup(u32 id) {
-    return server_lookup(id);
-}
-
-static i32 sys_irq_register_handler(u32 irq) {
-    return irq_register_handler((u8)irq);
-}
-
-static i32 sys_irq_wait_for(u32 irq) {
-    return irq_wait_for((u8)irq);
-}
-
-static i32 sys_vm_copy(u32 id, u32 dst, u32 src, u32 len, u32 dir) {
-    thread_ctrl_blk_s* peer = thread_lookup(id);
-    if (unlikely(!peer))
-        return -(i32)E_INVAL;
-
-    phys_addr_t dcr3 = peer->task->cr3, scr3 = thread_self()->task->cr3;
-    switch (dir) {
-        case VM_COPY_FROM_PEER:
-            return copy_between_user(scr3, (void*)src, dcr3, (void*)dst, (size_t)len);
-        case VM_COPY_TO_PEER:
-            return copy_between_user(dcr3, (void*)dst, scr3, (void*)src, (size_t)len);
-        default:
-            return -(i32)E_INVAL;
-    }
+    console_write(ALL_FLAG, kbuf, len);
+    return (i32)len;
 }
 
 static i32 sys_max(void) {

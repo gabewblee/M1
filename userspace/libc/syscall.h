@@ -2,54 +2,106 @@
 
 #include <uapi/uapi.h>
 
-/**
- * sys_ipc_send - Sends @packet to task @dst's port. Blocks while the port is full,
- *                until space becomes available.
- * @dst: The destination task ID.
- * @packet: The packet to send.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 sys_ipc_send(u32 dst, ipc_packet_s* packet);
+/* Userspace bindings for the seL4-faithful syscall set. Synchronous IPC carries
+   a msg_info tag in a register alongside the message buffer; the kernel resolves
+   every capability pointer against the calling thread's CSpace at its natural
+   depth, so no depth argument is needed. */
 
 /**
- * sys_ipc_recv - Receives a packet into @packet from the caller's port. Blocks
- *                until a packet is available.
- * @packet: The output packet buffer.
+ * sys_send - Sends @packet over the endpoint capability at @cptr, blocking until
+ *            a receiver takes the message.
+ * @cptr: The capability pointer to the endpoint.
+ * @mi: The message tag (label, capability count, length).
+ * @packet: The message buffer.
+ * @grant_cptr: The capability pointer to grant, or 0 to transfer none.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 sys_send(u32 cptr, msg_info_t mi, ipc_packet_s* packet, u32 grant_cptr);
+
+/**
+ * sys_nbsend - Polling send: like sys_send but fails when no receiver is ready.
+ * @cptr: The capability pointer to the endpoint.
+ * @mi: The message tag.
+ * @packet: The message buffer.
+ * @grant_cptr: The capability pointer to grant, or 0 to transfer none.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 sys_nbsend(u32 cptr, msg_info_t mi, ipc_packet_s* packet, u32 grant_cptr);
+
+/**
+ * sys_call - Sends @packet over the endpoint at @cptr and blocks for a reply.
+ * @cptr: The capability pointer to the endpoint.
+ * @mi: The request message tag.
+ * @packet: The in-out message buffer.
+ * @grant_cptr: The capability pointer to grant, or 0 to transfer none.
+ * Returns: The reply message tag on success, or a negative error code.
+ */
+i32 sys_call(u32 cptr, msg_info_t mi, ipc_packet_s* packet, u32 grant_cptr);
+
+/**
+ * sys_recv - Receives a message over the endpoint at @cptr, blocking until a
+ *            sender arrives.
+ * @cptr: The capability pointer to the endpoint.
+ * @reply_cptr: The reply object bound to a calling sender, or 0.
+ * @packet: The receive buffer.
+ * @badge: Out-parameter for the sender's badge, or NULL.
+ * @recv_slot: The empty slot accepting a granted capability, or 0 to accept none.
+ * Returns: The received message tag on success, or a negative error code.
+ */
+i32 sys_recv(u32 cptr, u32 reply_cptr, ipc_packet_s* packet, u32* badge, u32 recv_slot);
+
+/**
+ * sys_nbrecv - Polling receive: like sys_recv but fails when no sender is ready.
+ * @cptr: The capability pointer to the endpoint.
+ * @reply_cptr: The reply object bound to a calling sender, or 0.
+ * @packet: The receive buffer.
+ * @badge: Out-parameter for the sender's badge, or NULL.
+ * @recv_slot: The empty slot accepting a granted capability, or 0 to accept none.
+ * Returns: The received message tag on success, or a negative error code.
+ */
+i32 sys_nbrecv(u32 cptr, u32 reply_cptr, ipc_packet_s* packet, u32* badge, u32 recv_slot);
+
+/**
+ * sys_reply - Replies to the caller bound to the reply object at @reply_cptr.
+ * @reply_cptr: The capability pointer to the reply object.
+ * @mi: The reply message tag.
+ * @packet: The reply buffer.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 sys_reply(u32 reply_cptr, msg_info_t mi, ipc_packet_s* packet);
+
+/**
+ * sys_replyrecv - Replies to the caller bound to @reply_cptr, then receives the
+ *                 next request over @cptr and binds it to @reply_cptr.
+ * @cptr: The capability pointer to the endpoint.
+ * @reply_cptr: The capability pointer to the reply object.
+ * @mi: The reply message tag.
+ * @packet: The in-out message buffer.
+ * @badge: Out-parameter for the next sender's badge, or NULL.
+ * Returns: The next received message tag on success, or a negative error code.
+ */
+i32 sys_replyrecv(u32 cptr, u32 reply_cptr, msg_info_t mi, ipc_packet_s* packet, u32* badge);
+
+/**
+ * sys_signal - Signals the notification capability at @cptr.
+ * @cptr: The capability pointer to the notification.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 sys_signal(u32 cptr);
+
+/**
+ * sys_wait - Waits on the notification capability at @cptr.
+ * @cptr: The capability pointer to the notification.
+ * @badge: Out-parameter for the consumed signal bits, or NULL.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 sys_wait(u32 cptr, u32* badge);
+
+/**
+ * sys_yield - Yields the CPU to the highest priority runnable thread.
  * Returns: E_OK on success.
  */
-i32 sys_ipc_recv(ipc_packet_s* packet);
-
-/**
- * sys_ipc_call - Sends @packet to task @dst's port, then blocks until a reply is
- *                received into @packet. Requires the caller to have a reply port.
- * @dst: The destination task ID.
- * @packet: The in-out packet buffer.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 sys_ipc_call(u32 dst, ipc_packet_s* packet);
-
-/**
- * sys_ipc_reply - Sends @packet to thread @client's reply port, waking it if it is
- *                 blocked awaiting the reply.
- * @client: The destination thread ID.
- * @packet: The packet to send.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 sys_ipc_reply(u32 client, ipc_packet_s* packet);
-
-/**
- * sys_thread_create - Creates a new thread in the current task.
- * @entry: The thread's initial entry function.
- * @priority: The thread's initial scheduling priority.
- * Returns: The new thread ID on success, or a negative error code on failure.
- */
-i32 sys_thread_create(void (*entry)(void), u32 priority);
-
-/**
- * sys_thread_yield - Yields the CPU to the highest priority runnable thread.
- * Returns: E_OK on success.
- */
-i32 sys_thread_yield(void);
+i32 sys_yield(void);
 
 /**
  * sys_thread_exit - Terminates the running thread.
@@ -58,65 +110,9 @@ i32 sys_thread_yield(void);
 void sys_thread_exit(i32 code);
 
 /**
- * sys_map_pg - Maps @vaddr to @paddr with @flags.
- * @paddr: The physical address to map to.
- * @vaddr: The virtual address to map.
- * @flags: The flags for the page table entry.
- * Returns: E_OK on success.
+ * sys_dbg_puts - Writes @len bytes of @str to the kernel debug console.
+ * @str: The string to write.
+ * @len: The number of bytes to write.
+ * Returns: The number of bytes written, or a negative error code on failure.
  */
-i32 sys_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags);
-
-/**
- * sys_unmap_pg - Unmaps the mapping at @vaddr. No-op if @vaddr is not mapped.
- * @vaddr: The virtual address to unmap.
- * Returns: E_OK on success.
- */
-i32 sys_unmap_pg(void* vaddr);
-
-/**
- * sys_log_read - Reads at most @len bytes from the kernel log ring buffer,
- *                starting at @off.
- * @dst: The output buffer.
- * @len: The maximum number of bytes to read.
- * @off: The offset from the oldest available byte.
- * Returns: The number of bytes copied to @dst.
- */
-i32 sys_log_read(void* dst, u32 len, u32 off);
-
-/**
- * sys_server_lookup - Looks up the task ID associated with @id.
- * @id: The server ID to lookup.
- * Returns: The task ID on success, or a negative error code on failure.
- */
-i32 sys_server_lookup(u32 id);
-
-/**
- * sys_irq_register_handler - Registers a handler for IRQ @irq. The handler
- *                            unblocks all threads waiting for IRQ @irq.
- * @irq: The IRQ number to register.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 sys_irq_register_handler(u32 irq);
-
-/**
- * sys_irq_wait_for - Waits for IRQ @irq to fire.
- * @irq: The IRQ number to wait for.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 sys_irq_wait_for(u32 irq);
-
-/**
- * sys_vm_copy - Transfers @len bytes between the caller's address space and
- *               thread @id's address space.
- * 
- *               @dir controls direction:
- *               - VM_COPY_FROM_PEER: copies from @dst in peer into @src in caller.
- *               - VM_COPY_TO_PEER: copies from @src in caller into @dst in peer.
- * @id: The peer thread ID.
- * @dst: Buffer in the peer's address space.
- * @src: Buffer in the caller's address space.
- * @len: Number of bytes to transfer.
- * @dir: VM_COPY_FROM_PEER or VM_COPY_TO_PEER.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 sys_vm_copy(u32 id, void* dst, void* src, u32 len, u32 dir);
+i32 sys_dbg_puts(const char* str, u32 len);

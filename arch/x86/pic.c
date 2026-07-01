@@ -96,4 +96,4 @@ static void __init pic_initcall(void) {
     pic_init(0x20, 0x28);
 }
 
-early_initcall(pic_initcall);
+arch_initcall(pic_initcall);

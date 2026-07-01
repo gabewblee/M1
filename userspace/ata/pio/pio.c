@@ -1,8 +1,16 @@
 #include <uapi/errno.h>
 #include <uapi/io.h>
+#include <uapi/servers.h>
 #include <userspace/ata/pio/pio.h>
 #include <userspace/ata/regs.h>
 #include <userspace/libc/syscall.h>
+
+/* Both ATA channel IRQ handlers signal one notification; the server waits on it
+   for transfer completion, exactly as a seL4 driver waits on a bound
+   notification. */
+static i32 ata_irq_wait(void) {
+    return sys_wait(SERVICE_CPTR_NTFN, 0);
+}
 
 static i32 ata_data_wait(ata_channel_s* channel) {
     for (u32 spins = 0; spins < 1000000u; spins++) {
@@ -78,7 +86,7 @@ static i32 ata_read_lba28(ata_drv_s* drv, u64 lba, u8 cnt, void* buf) {
     u32 total = (!cnt) ? 256u : (u32)cnt;
 
     for (u32 sec = 0; sec < total; sec++) {
-        i32 ret = sys_irq_wait_for(channel->irq);
+        i32 ret = ata_irq_wait();
         if (ret != E_OK)
             return ret;
 
@@ -101,7 +109,7 @@ static i32 ata_write_lba28(ata_drv_s* drv, u64 lba, u8 cnt, void* buf) {
     u32 total = (!cnt) ? 256u : (u32)cnt;
 
     for (u32 sec = 0; sec < total; sec++) {
-        i32 ret = sys_irq_wait_for(channel->irq);
+        i32 ret = ata_irq_wait();
         if (ret != E_OK)
             return ret;
 
@@ -114,7 +122,7 @@ static i32 ata_write_lba28(ata_drv_s* drv, u64 lba, u8 cnt, void* buf) {
     }
 
     ata_write_reg(channel, ATA_CMD_REG_OFFSET, ATA_FLUSH_CMD);
-    if (sys_irq_wait_for(channel->irq) != E_OK)
+    if (ata_irq_wait() != E_OK)
         return -(i32)E_AGAIN;
 
     return ata_done_wait(channel);
@@ -128,7 +136,7 @@ static i32 ata_read_lba48(ata_drv_s* drv, u64 lba, u16 cnt, void* buf) {
     u32 total = (!cnt) ? 65536u : (u32)cnt;
 
     for (u32 sec = 0; sec < total; sec++) {
-        i32 ret = sys_irq_wait_for(channel->irq);
+        i32 ret = ata_irq_wait();
         if (ret != E_OK)
             return ret;
 
@@ -150,7 +158,7 @@ static i32 ata_write_lba48(ata_drv_s* drv, u64 lba, u16 cnt, void* buf) {
     ata_issue_lba48(drv, lba, cnt, ATA_WRITE48_CMD);
     u32 total = (!cnt) ? 65536u : (u32)cnt;
     for (u32 sec = 0; sec < total; sec++) {
-        i32 ret = sys_irq_wait_for(channel->irq);
+        i32 ret = ata_irq_wait();
         if (ret != E_OK)
             return ret;
 
@@ -163,7 +171,7 @@ static i32 ata_write_lba48(ata_drv_s* drv, u64 lba, u16 cnt, void* buf) {
     }
 
     ata_write_reg(channel, ATA_CMD_REG_OFFSET, ATA_FLUSH_CMD);
-    if (sys_irq_wait_for(channel->irq) != E_OK)
+    if (ata_irq_wait() != E_OK)
         return -(i32)E_AGAIN;
 
     return ata_done_wait(channel);

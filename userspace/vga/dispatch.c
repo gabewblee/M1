@@ -1,5 +1,6 @@
 #include <uapi/uapi.h>
 #include <uapi/vga.h>
+#include <userspace/libc/capability.h>
 #include <userspace/libc/string.h>
 #include <userspace/libc/syscall.h>
 #include <userspace/vga/dispatch.h>
@@ -35,7 +36,9 @@ static i32 handle_clear(ipc_packet_s* packet) {
 }
 
 i32 init(void) {
-    if (sys_map_pg(VGA_ADDR, VGA_ADDR, PG_RW_FLAG | PG_USER_FLAG) != E_OK)
+    /* Map the framebuffer device frame the root server handed us into our own
+       address space, at the address the driver writes to. */
+    if (page_map(SERVICE_CPTR_VGA_FB, SERVICE_CPTR_VSPACE, SERVICE_CNODE_DEPTH, VGA_ADDR, PG_RW_FLAG) != E_OK)
         return -(i32)E_FAULT;
 
     vga_init();
@@ -44,5 +47,5 @@ i32 init(void) {
 }
 
 void fini(void) {
-    sys_unmap_pg((void*)VGA_ADDR);
+    page_unmap(SERVICE_CPTR_VGA_FB, SERVICE_CPTR_VSPACE, SERVICE_CNODE_DEPTH, VGA_ADDR);
 }

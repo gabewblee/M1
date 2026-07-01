@@ -135,7 +135,7 @@ virt_addr_t load_elf32(void* data, size_t sz) {
 
     virt_addr_t prev = 0; bool ok = false;
     for (u16 i = 0; i < phdr_cnt; i++) {
-        if (phdr[i].p_type != PT_LOAD)
+        if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
             continue;
 
         if (unlikely(is_valid_load_seg(&phdr[i], sz) == -1))
@@ -155,7 +155,7 @@ virt_addr_t load_elf32(void* data, size_t sz) {
 
     virt_addr_t cursor = 0;
     for (u16 i = 0; i < phdr_cnt; i++) {
-        if (phdr[i].p_type != PT_LOAD)
+        if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
             continue;
 
         virt_addr_t lo = ALIGN_DOWN_TO(phdr[i].p_vaddr, PG_SZ);
@@ -171,7 +171,7 @@ virt_addr_t load_elf32(void* data, size_t sz) {
     }
 
     for (u16 i = 0; i < phdr_cnt; i++) {
-        if (phdr[i].p_type != PT_LOAD)
+        if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
             continue;
 
         memcpy((void*)phdr[i].p_vaddr, (u8*)data + phdr[i].p_offset, phdr[i].p_filesz);
@@ -180,7 +180,7 @@ virt_addr_t load_elf32(void* data, size_t sz) {
     }
 
     for (u16 i = 0; i < phdr_cnt; i++) {
-        if (phdr[i].p_type != PT_LOAD)
+        if (phdr[i].p_type != PT_LOAD || phdr[i].p_memsz == 0)
             continue;
 
         virt_addr_t lo = ALIGN_DOWN_TO(phdr[i].p_vaddr, PG_SZ);

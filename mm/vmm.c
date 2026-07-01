@@ -11,6 +11,7 @@
 #include <mm/vmm.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <uapi/errno.h>
 
 spinlock_s vmm_scratch_lk;
 
@@ -121,7 +122,7 @@ static void __init alloc_pg_table(virt_addr_t vaddr) {
     memset(get_pg_table(pg_dir_idx), 0, sizeof(pg_table_s));
 }
 
-void vmm_pg_fault_handler(int_frm_s* frm) {
+void vmm_pg_fault_handler(ifrm_s* frm) {
     if (likely(!(frm->err & 1))) {
         virt_addr_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
@@ -180,6 +181,17 @@ bool vmm_range_accessible(virt_addr_t vaddr, size_t nbytes, u32 flags) {
     }
 
     return true;
+}
+
+void vmm_aspace_init(void* pg_dir) {
+    pg_dir_s* new = (pg_dir_s*)pg_dir;
+    memset(new, 0, sizeof(pg_dir_s));
+
+    pg_dir_s* kernel_pg_dir = (pg_dir_s*)swapper_pg_dir;
+    for (u32 pg_dir_idx = HIGHER_HALF_IDX; pg_dir_idx < PG_DIR_IDX; pg_dir_idx++)
+        new->entries[pg_dir_idx] = kernel_pg_dir->entries[pg_dir_idx];
+
+    set_pg_dir_entry(&new->entries[PG_DIR_IDX], __pa(pg_dir), PG_RW_FLAG);
 }
 
 phys_addr_t vmm_create_aspace(void) {
@@ -249,6 +261,76 @@ void vmm_map_pg(phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
     flush_tlb_mapping(vaddr);
 }
 
+void vmm_map_pg_in(phys_addr_t cr3, phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
+    u32 eflags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(eflags) : : "memory");
+
+    phys_addr_t saved;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(saved) : : "memory");
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+
+    vmm_map_pg(paddr, vaddr, flags);
+
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(saved) : "memory");
+
+    __asm__ volatile("push %0; popf" : : "r"(eflags) : "memory", "cc");
+}
+
+i32 vmm_map_pg_table_in(phys_addr_t cr3, phys_addr_t pg_table_paddr, virt_addr_t vaddr, u32 flags) {
+    u32 eflags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(eflags) : : "memory");
+
+    phys_addr_t saved;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(saved) : : "memory");
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+
+    u32 pg_dir_idx = get_pg_dir_idx(vaddr);
+    pg_dir_entry_s* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
+    i32 ret = E_OK;
+    if (pg_dir_entry->present) {
+        ret = -(i32)E_EXIST;
+    } else {
+        set_pg_dir_entry(pg_dir_entry, pg_table_paddr, flags);
+        flush_tlb_mapping(PG_TABLE(pg_dir_idx));
+        memset(get_pg_table(pg_dir_idx), 0, sizeof(pg_table_s));
+    }
+
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(saved) : "memory");
+
+    __asm__ volatile("push %0; popf" : : "r"(eflags) : "memory", "cc");
+    return ret;
+}
+
+i32 vmm_map_frm_in(phys_addr_t cr3, phys_addr_t paddr, virt_addr_t vaddr, u32 flags) {
+    u32 eflags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(eflags) : : "memory");
+
+    phys_addr_t saved;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(saved) : : "memory");
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+
+    u32 pg_dir_idx = get_pg_dir_idx(vaddr);
+    pg_dir_entry_s* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
+    i32 ret = E_OK;
+    if (!pg_dir_entry->present) {
+        ret = -(i32)E_FAULT;
+    } else {
+        set_pg_table_entry(get_pg_table_entry(pg_dir_idx, get_pg_table_idx(vaddr)), paddr, flags);
+        flush_tlb_mapping(vaddr);
+    }
+
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(saved) : "memory");
+
+    __asm__ volatile("push %0; popf" : : "r"(eflags) : "memory", "cc");
+    return ret;
+}
+
 void vmm_unmap_pg(virt_addr_t vaddr) {
     u32 pg_dir_idx = get_pg_dir_idx(vaddr);
     pg_dir_entry_s* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
@@ -259,6 +341,28 @@ void vmm_unmap_pg(virt_addr_t vaddr) {
     pg_table_entry_s* pg_table_entry = get_pg_table_entry(pg_dir_idx, pg_table_idx);
     pg_table_entry->present = 0;
     flush_tlb_mapping(vaddr);
+}
+
+void vmm_unmap_pg_in(phys_addr_t cr3, virt_addr_t vaddr) {
+    u32 eflags;
+    __asm__ volatile("pushf; pop %0; cli" : "=r"(eflags) : : "memory");
+
+    phys_addr_t saved;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(saved) : : "memory");
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+
+    u32 pg_dir_idx = get_pg_dir_idx(vaddr);
+    pg_dir_entry_s* pg_dir_entry = get_pg_dir_entry(pg_dir_idx);
+    if (pg_dir_entry->present) {
+        get_pg_table_entry(pg_dir_idx, get_pg_table_idx(vaddr))->present = 0;
+        flush_tlb_mapping(vaddr);
+    }
+
+    if (saved != cr3)
+        __asm__ volatile("mov %0, %%cr3" : : "r"(saved) : "memory");
+
+    __asm__ volatile("push %0; popf" : : "r"(eflags) : "memory", "cc");
 }
 
 void vmm_demand_map(virt_addr_t vaddr, u32 flags) {
@@ -290,4 +394,4 @@ void __init vmm_init(void) {
     idt_register_handler(14, vmm_pg_fault_handler);
 }
 
-core_initcall(vmm_init);
+mm_initcall(vmm_init);

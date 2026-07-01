@@ -14,7 +14,7 @@ void pmm_free_init_section(void);
 
 /**
  * pmm_alloc_frm - Allocates a page-aligned physical frame.
- * Returns: The physical address of the allocated frame, or 0 on failure.
+ * Returns: The physical address of the allocated frame on success, or 0 on failure.
  */
 phys_addr_t pmm_alloc_frm(void);
 
@@ -28,7 +28,7 @@ void pmm_free_frm(phys_addr_t paddr);
  * pmm_alloc_frms - Allocates @cnt physically contiguous, page-aligned
  *                  physical frames.
  * @cnt: The number of contiguous frames to allocate.
- * Returns: The physical address of the first allocated frame, or 0 on failure.
+ * Returns: The physical address of the first allocated frame on success, or 0 on failure.
  */
 phys_addr_t pmm_alloc_frms(u32 cnt);
 

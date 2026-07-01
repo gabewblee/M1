@@ -1,7 +1,6 @@
 #include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/task.h>
-#include <kernel/ipc/ipc.h>
 #include <libk/string.h>
 #include <mm/kheap.h>
 #include <stddef.h>
@@ -15,16 +14,10 @@ static task_ctrl_blk_s* task_init(phys_addr_t cr3) {
     if (unlikely(!task))
         return NULL;
 
-    *task = (task_ctrl_blk_s) {
-        .id   = 0,
-        .cr3  = cr3,
-        .port = port_create(IPC_QUEUE_CAP)
+    *task = (task_ctrl_blk_s){
+        .id  = 0,
+        .cr3 = cr3,
     };
-
-    if (unlikely(!task->port)) {
-        kfree(task);
-        return NULL;
-    }
 
     list_init(&task->threads);
     return task;
@@ -52,10 +45,10 @@ task_ctrl_blk_s* task_create(phys_addr_t cr3) {
         return NULL;
 
     if (unlikely(alloc_task_id(task) < 0)) {
-        port_destroy(task->port);
         kfree(task);
         return NULL;
     }
+    
     return task;
 }
 
@@ -67,7 +60,6 @@ void task_destroy(task_ctrl_blk_s* task) {
         PANIC("Error: Failed to destroy task with live threads");
 
     tasks[task->id] = NULL;
-    port_destroy(task->port);
     kfree((void*)task);
 }
 
@@ -83,4 +75,4 @@ void __init task0_init(void) {
     task0 = task;
 }
 
-late_initcall(task0_init);
+user_initcall(task0_init);
