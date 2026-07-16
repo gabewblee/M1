@@ -42,7 +42,7 @@ static void print_drv_info(u32 idx, ata_drv_s* drv) {
     printf("  Total sectors: %d\n",     drv->lba48 ? drv->total48 : drv->total28);
 }
 
-static i32 handle_info(ipc_msg_s* msg) {
+static i32 handle_info(ipc_msg_s* msg, u32 badge) {
     ata_server_reply_s rep = {0};
     ata_server_req_s* req = (ata_server_req_s*)msg->payload;
 
@@ -62,7 +62,7 @@ static i32 handle_info(ipc_msg_s* msg) {
     return (i32)sizeof(rep);
 }
 
-static i32 handle_read(ipc_msg_s* msg) {
+static i32 handle_read(ipc_msg_s* msg, u32 badge) {
     ata_server_req_s* req = (ata_server_req_s*)msg->payload;
     ata_server_reply_s rep = {0};
 
@@ -78,7 +78,7 @@ static i32 handle_read(ipc_msg_s* msg) {
     return (i32)sizeof(rep);
 }
 
-static i32 handle_write(ipc_msg_s* msg) {
+static i32 handle_write(ipc_msg_s* msg, u32 badge) {
     ata_server_req_s* req = (ata_server_req_s*)msg->payload;
     ata_server_reply_s rep = {0};
 

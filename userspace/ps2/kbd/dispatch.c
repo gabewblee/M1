@@ -12,7 +12,7 @@ const server_handler_f kbd_handlers[SERVER_OP_MAX] = {
     KBD_SERVER_OPS(SERVER_OP_ENTRY)
 };
 
-static i32 handle_read(ipc_msg_s* msg) {
+static i32 handle_read(ipc_msg_s* msg, u32 badge) {
     kbd_event_s event;
     ps2_kbd_read(&event);
     

@@ -18,7 +18,17 @@ void* memset(void* s, int c, size_t n);
  * @n: The number of bytes to copy.
  * Returns: The destination buffer.
  */
-void* memcpy(void* dst, void* src, size_t n);
+void* memcpy(void* dst, const void* src, size_t n);
+
+/**
+ * memcmp - Compares @n bytes of @a and @b.
+ * @a: The first buffer.
+ * @b: The second buffer.
+ * @n: The number of bytes to compare.
+ * Returns: 0 if the buffers are equal, a negative value if @a sorts before
+ *          @b, or a positive value if @a sorts after @b.
+ */
+int memcmp(const void* a, const void* b, size_t n);
 
 /**
  * strcmp - Compares two NUL-terminated strings.
@@ -27,11 +37,11 @@ void* memcpy(void* dst, void* src, size_t n);
  * Returns: 0 if the strings are equal, a negative value if @a sorts before
  *          @b, or a positive value if @a sorts after @b.
  */
-int strcmp(char* a, char* b);
+int strcmp(const char* a, const char* b);
 
 /**
  * strlen - Returns the length of @s.
  * @s: The string to measure.
  * Returns: The length of @s.
  */
-size_t strlen(char* s);
+size_t strlen(const char* s);

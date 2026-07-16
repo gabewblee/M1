@@ -6,7 +6,8 @@ typedef enum server_id_e {
     SERVER_ID_vga      = 0, /* VGA server ID      */
     SERVER_ID_keyboard = 1, /* PS/2 kbd server ID */
     SERVER_ID_ata      = 2, /* ATA server ID      */
-    SERVER_ID_CNT      = 3, /* Server count       */
+    SERVER_ID_vfs      = 3, /* VFS server ID      */
+    SERVER_ID_CNT      = 4, /* Server count       */
 } server_id_e;
 
 #define SERVICE_CNODE_RADIX 4u          /* log2(server CSpace slot count) */

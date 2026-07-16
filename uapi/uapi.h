@@ -10,4 +10,5 @@
 #include <servers.h>
 #include <types.h>
 #include <uapi/syscall.h>
+#include <vfs.h>
 #include <vga.h>

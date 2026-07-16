@@ -3,10 +3,10 @@
 #include <uapi/uapi.h>
 
 #define SERVER_OP_MAX             64u
-#define SERVER_OP_DECL(id, name)  static i32 handle_##name(ipc_msg_s* msg);
+#define SERVER_OP_DECL(id, name)  static i32 handle_##name(ipc_msg_s* msg, u32 badge);
 #define SERVER_OP_ENTRY(id, name) [id] = handle_##name,
 
-typedef i32 (*server_handler_f)(ipc_msg_s* msg);
+typedef i32 (*server_handler_f)(ipc_msg_s* msg, u32 badge);
 
 typedef struct server_s {
     char*                   name;          /* Server name             */

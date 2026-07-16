@@ -5,9 +5,9 @@
 #include <userspace/libc/syscall.h>
 #include <userspace/server/server.h>
 
-static i32 dispatch(server_s* server, ipc_msg_s* msg, u32 op) {
+static i32 dispatch(server_s* server, ipc_msg_s* msg, u32 op, u32 badge) {
     if (op < SERVER_OP_MAX && server->handlers[op])
-        return server->handlers[op](msg);
+        return server->handlers[op](msg, badge);
 
     return rep_stat_only(msg, -(i32)E_NOSYS);
 }
@@ -30,7 +30,7 @@ void run(server_s* server) {
             continue;
         }
 
-        i32 len = dispatch(server, &msg, get_msg_label((msg_info_t)mi));
+        i32 len = dispatch(server, &msg, get_msg_label((msg_info_t)mi), badge);
         if (len < 0)
             len = rep_stat_only(&msg, len);
 

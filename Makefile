@@ -79,6 +79,24 @@ VGA_C_OBJS = $(VGA_SRCS:%.c=build/%.o)
 VGA_OBJS   = $(LIBC_OBJS) $(SERVER_OBJS) $(VGA_C_OBJS) $(STARTUP_ASMS_OBJS)
 VGA_TARGET = build/userspace/vga/vga.elf
 
+VFS_SRCS   = userspace/vfs/dcache.c   \
+             userspace/vfs/dispatch.c \
+             userspace/vfs/file.c     \
+             userspace/vfs/heap.c     \
+             userspace/vfs/inode.c    \
+             userspace/vfs/libfs.c    \
+             userspace/vfs/log.c      \
+             userspace/vfs/main.c     \
+             userspace/vfs/mount.c    \
+             userspace/vfs/namei.c    \
+             userspace/vfs/radix.c    \
+             userspace/vfs/ramfs.c    \
+             userspace/vfs/selftest.c \
+             userspace/vfs/super.c
+VFS_C_OBJS = $(VFS_SRCS:%.c=build/%.o)
+VFS_OBJS   = $(LIBC_OBJS) $(SERVER_OBJS) $(VFS_C_OBJS) $(STARTUP_ASMS_OBJS)
+VFS_TARGET = build/userspace/vfs/vfs.elf
+
 STARTUP_ASMS      = userspace/startup/crt0.asm
 STARTUP_ASMS_OBJS = $(STARTUP_ASMS:%.asm=build/%.o)
 
@@ -95,16 +113,16 @@ ATA_C_OBJS = $(ATA_SRCS:%.c=build/%.o)
 ATA_OBJS   = $(LIBC_OBJS) $(SERVER_OBJS) $(ATA_C_OBJS) $(STARTUP_ASMS_OBJS)
 ATA_TARGET = build/userspace/ata/ata.elf
 
-ISO = iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf iso/boot/root.elf
+ISO = iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf iso/boot/vfs.elf iso/boot/root.elf
 
 #----------------------------------------------------------------------------------------------------
 # Build targets
 #----------------------------------------------------------------------------------------------------
 
-all: $(ATA_TARGET) $(KERNEL_TARGET) $(PS2_TARGET) $(VGA_TARGET) $(ROOT_TARGET)
+all: $(ATA_TARGET) $(KERNEL_TARGET) $(PS2_TARGET) $(VGA_TARGET) $(VFS_TARGET) $(ROOT_TARGET)
 
 clean:
-	rm -rf build/* iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf iso/boot/root.elf
+	rm -rf build/* iso/boot/m1.elf iso/boot/vga.elf iso/boot/keyboard.elf iso/boot/ata.elf iso/boot/vfs.elf iso/boot/root.elf
 
 run: iso/boot/grub/grub.cfg $(ISO)
 	@mkdir -p build
@@ -145,12 +163,17 @@ $(VGA_TARGET): $(VGA_OBJS)
 	$(I686_ELF_LD) $(USER_LDFLAGS) $(VGA_OBJS) -o $@
 	cp $@ iso/boot/vga.elf
 
+$(VFS_TARGET): $(VFS_OBJS)
+	@mkdir -p $(dir $@) iso/boot
+	$(I686_ELF_LD) $(USER_LDFLAGS) $(VFS_OBJS) -o $@
+	cp $@ iso/boot/vfs.elf
+
 $(ROOT_TARGET): $(ROOT_OBJS)
 	@mkdir -p $(dir $@) iso/boot
 	$(I686_ELF_LD) $(USER_LDFLAGS) $(ROOT_OBJS) -o $@
 	cp $@ iso/boot/root.elf
 
-$(ATA_C_OBJS) $(LIBC_OBJS) $(PS2_C_OBJS) $(SERVER_OBJS) $(VGA_C_OBJS) $(ROOT_C_OBJS): build/%.o: %.c
+$(ATA_C_OBJS) $(LIBC_OBJS) $(PS2_C_OBJS) $(SERVER_OBJS) $(VGA_C_OBJS) $(VFS_C_OBJS) $(ROOT_C_OBJS): build/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(I686_ELF_GCC) $(USER_CFLAGS) -c $< -o $@
 
@@ -163,5 +186,6 @@ build/%.o: %.asm
 	$(NASM) -f elf32 -I. -Iinclude $< -o $@
 
 DEPS = $(KERNEL_C_OBJS:.o=.d) $(LIBC_OBJS:.o=.d) $(SERVER_OBJS:.o=.d) \
-       $(PS2_C_OBJS:.o=.d) $(VGA_C_OBJS:.o=.d) $(ATA_C_OBJS:.o=.d) $(ROOT_C_OBJS:.o=.d)
+       $(PS2_C_OBJS:.o=.d) $(VGA_C_OBJS:.o=.d) $(ATA_C_OBJS:.o=.d)   \
+       $(VFS_C_OBJS:.o=.d) $(ROOT_C_OBJS:.o=.d)
 -include $(DEPS)

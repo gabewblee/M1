@@ -12,3 +12,11 @@
 #define E_NOTDIR   9u  /* Not a directory           */
 #define E_ISDIR    10u /* Is a directory            */
 #define E_NOTEMPTY 11u /* Directory not empty       */
+#define E_BADF     12u /* Bad file descriptor       */
+#define E_MFILE    13u /* Too many open files       */
+#define E_LOOP     14u /* Too many symbolic links   */
+#define E_NAMELONG 15u /* Name too long             */
+#define E_XDEV     16u /* Cross-device link         */
+#define E_NODEV    17u /* No such device            */
+#define E_BUSY     18u /* Resource busy             */
+#define E_NOSPC    19u /* No space left on device   */
