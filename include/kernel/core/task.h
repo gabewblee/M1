@@ -5,17 +5,14 @@
 
 #define KERNEL_TASK_ID 0u
 
-typedef struct task_port_s task_port_s;
-
 typedef struct task_ctrl_blk_s {
     /* Task fields   */
-    u32          id;       /* Task ID                         */
-    phys_addr_t  cr3;      /* Page directory physical address */
-    task_port_s* port;     /* IPC port for packet passing     */
+    u32         id;       /* Task ID                         */
+    phys_addr_t cr3;      /* Page directory physical address */
 
     /* Thread fields */
-    u32          nthreads; /* Thread list count               */
-    list_node_s  threads;  /* Thread list head                */
+    u32         nthreads; /* Thread list count               */
+    list_node_s threads;  /* Thread list head                */
 } task_ctrl_blk_s;
 
 /**
@@ -41,8 +38,3 @@ task_ctrl_blk_s* task_create(phys_addr_t cr3);
  * - @task has no live threads.
  */
 void task_destroy(task_ctrl_blk_s* task);
-
-/**
- * task0_init - Initializes the tasking subsystem.
- */
-void __init task0_init(void);

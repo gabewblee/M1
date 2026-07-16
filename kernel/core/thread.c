@@ -3,16 +3,16 @@
 #include <kernel/core/sched.h>
 #include <kernel/core/task.h>
 #include <kernel/core/thread.h>
-#include <kernel/ipc/ipc.h>
 #include <kernel/sync/spinlock.h>
 #include <libk/list.h>
 #include <libk/string.h>
 #include <mm/kheap.h>
 #include <stddef.h>
+#include <uapi/errno.h>
 
 thread_ctrl_blk_s* running;
 
-static spinlock_s         lk;
+static spinlock_s         lock;
 static thread_ctrl_blk_s* threads[THREAD_MAX_CNT];
 
 extern u8   gdt_start[];
@@ -65,6 +65,7 @@ static u32* user_stack_init(u32* top, virt_addr_t entry, virt_addr_t uesp, u32 e
 static thread_ctrl_blk_s* thread_create(task_ctrl_blk_s* task,
                                         u8*              stack0,
                                         virt_addr_t      esp,
+                                        capability_s     root,
                                         u8               priority) {
     thread_ctrl_blk_s* thread = (thread_ctrl_blk_s*)kmalloc(sizeof(thread_ctrl_blk_s));
     if (unlikely(!thread)) { 
@@ -72,24 +73,17 @@ static thread_ctrl_blk_s* thread_create(task_ctrl_blk_s* task,
         return NULL;
     }
 
-    task_port_s* reply_port = port_create(1);
-    if (unlikely(!reply_port)) {
-        kfree(stack0);
-        kfree(thread);
-        return NULL;
-    }
-
-    *thread = (thread_ctrl_blk_s) {
-        .esp0       = (virt_addr_t)(stack0 + THREAD_KSTACK_SZ),
-        .esp        = esp,
-        .cr3        = task->cr3,
-        .id         = 0,
-        .stack0     = stack0,
-        .task       = task,
-        .reply_port = reply_port,
-        .priority   = priority,
-        .quantum    = SCHED_QUANTUM,
-        .state      = THREAD_STATE_READY,
+    *thread = (thread_ctrl_blk_s){
+        .esp0     = (virt_addr_t)(stack0 + THREAD_KSTACK_SZ),
+        .esp      = esp,
+        .cr3      = task->cr3,
+        .id       = 0,
+        .stack0   = stack0,
+        .task     = task,
+        .root     = root,
+        .priority = priority,
+        .quantum  = SCHED_QUANTUM,
+        .state    = THREAD_STATE_READY,
     };
 
     list_init(&thread->task_link);
@@ -97,9 +91,8 @@ static thread_ctrl_blk_s* thread_create(task_ctrl_blk_s* task,
     list_init(&thread->wait_link);
 
     {
-        spin_guard(&lk);
+        spin_guard(&lock);
         if (unlikely(alloc_thread_id(thread) < 0)) {
-            port_destroy(reply_port);
             kfree(stack0);
             kfree(thread);
             return NULL;
@@ -110,6 +103,39 @@ static thread_ctrl_blk_s* thread_create(task_ctrl_blk_s* task,
 
     sched_ready(thread);
     return thread;
+}
+
+static void __init threading_init(void) {
+    spinlock_init(&lock);
+
+    thread_ctrl_blk_s* thread = kmalloc(sizeof(thread_ctrl_blk_s));
+    if (unlikely(!thread))
+        PANIC("Error: Failed to initialize thread");
+
+    u32 esp;
+    __asm__ volatile ("mov %%esp, %0" : "=r"(esp));
+
+    task_ctrl_blk_s* alpha = task_lookup(KERNEL_TASK_ID);
+    *thread = (thread_ctrl_blk_s){
+        .esp0     = (virt_addr_t)kernel_stack_top,
+        .esp      = (virt_addr_t)esp,
+        .cr3      = alpha->cr3,
+        .id       = 0,
+        .task     = alpha,
+        .state    = THREAD_STATE_RUNNING,
+        .priority = SCHED_IDLE_PRIORITY,
+        .quantum  = SCHED_QUANTUM
+    };
+
+    list_init(&thread->task_link);
+    list_add_to_tail(&thread->task_link, &alpha->threads);
+    alpha->nthreads++;
+
+    list_init(&thread->run_link);
+    list_init(&thread->wait_link);
+    
+    threads[0] = thread;
+    running = thread;
 }
 
 thread_ctrl_blk_s* thread_lookup(u32 id) {
@@ -134,12 +160,13 @@ thread_ctrl_blk_s* kernel_thread_create(task_ctrl_blk_s* task, virt_addr_t entry
         return NULL;
 
     virt_addr_t esp = (virt_addr_t)kernel_stack_init((u32*)(stack0 + THREAD_KSTACK_SZ), entry);
-    return thread_create(task, stack0, esp, priority);
+    return thread_create(task, stack0, esp, capability_mk_null(), priority);
 }
 
 thread_ctrl_blk_s* user_thread_create(task_ctrl_blk_s* task,
                                       virt_addr_t      entry,
                                       virt_addr_t      user_stack_top,
+                                      capability_s     root,
                                       u32              eflags, 
                                       u8               priority) {
     u8* stack0 = (u8*)kzalloc(THREAD_KSTACK_SZ);
@@ -147,11 +174,65 @@ thread_ctrl_blk_s* user_thread_create(task_ctrl_blk_s* task,
         return NULL;
 
     virt_addr_t esp = (virt_addr_t)user_stack_init((u32*)(stack0 + THREAD_KSTACK_SZ), entry, user_stack_top, eflags);
-    return thread_create(task, stack0, esp, priority);
+    return thread_create(task, stack0, esp, root, priority);
+}
+
+i32 thread_init(thread_ctrl_blk_s* thread) {
+    thread->state = THREAD_STATE_BLOCKED;
+    list_init(&thread->task_link);
+    list_init(&thread->run_link);
+    list_init(&thread->wait_link);
+    return E_OK;
+}
+
+i32 thread_config(thread_ctrl_blk_s* thread, 
+                  task_ctrl_blk_s*   task,
+                  virt_addr_t        entry, 
+                  virt_addr_t        sp, 
+                  phys_addr_t        cr3,
+                  capability_s       root, 
+                  u8                 priority, 
+                  bool               user) {
+    u8* stack0 = (u8*)kzalloc(THREAD_KSTACK_SZ);
+    if (unlikely(!stack0))
+        return -(i32)E_NOMEM;
+
+    u32* top = (u32*)(stack0 + THREAD_KSTACK_SZ);
+    thread->stack0   = stack0;
+    thread->esp0     = (virt_addr_t)top;
+    thread->esp      = user ? (virt_addr_t)user_stack_init(top, entry, sp, 0x3202u) : (virt_addr_t)kernel_stack_init(top, entry);
+    thread->cr3      = cr3;
+    thread->task     = task;
+    thread->root     = root;
+    thread->priority = priority;
+    thread->quantum  = SCHED_QUANTUM;
+    thread->state    = THREAD_STATE_BLOCKED;
+
+    list_init(&thread->task_link);
+    list_init(&thread->run_link);
+    list_init(&thread->wait_link);
+
+    spin_guard(&lock);
+    if (unlikely(alloc_thread_id(thread) < 0)) {
+        kfree(stack0);
+        thread->stack0 = NULL;
+        return -(i32)E_NOMEM;
+    }
+
+    if (task) {
+        list_add_to_tail(&thread->task_link, &task->threads);
+        task->nthreads++;
+    }
+
+    return E_OK;
+}
+
+void thread_resume(thread_ctrl_blk_s* thread) {
+    sched_ready(thread);
 }
 
 void thread_destroy(thread_ctrl_blk_s* thread) {
-    if (unlikely(!thread_lookup(thread->id)))
+    if (unlikely(thread_lookup(thread->id) != thread))
         return;
 
     if (list_is_attached(&thread->wait_link))
@@ -162,9 +243,6 @@ void thread_destroy(thread_ctrl_blk_s* thread) {
 
     if (thread->task)
         thread->task->nthreads--;
-    
-    if (thread->reply_port)
-        port_destroy(thread->reply_port);
 
     if (thread->stack0)
         kfree(thread->stack0);
@@ -172,38 +250,4 @@ void thread_destroy(thread_ctrl_blk_s* thread) {
     kfree(thread);
 }
 
-void __init thread0_init(void) {
-    spinlock_init(&lk);
-
-    thread_ctrl_blk_s* thread0 = kmalloc(sizeof(thread_ctrl_blk_s));
-    if (unlikely(!thread0))
-        PANIC("Error: Failed to initialize thread0");
-
-    u32 esp;
-    __asm__ volatile ("mov %%esp, %0" : "=r"(esp));
-
-    task_ctrl_blk_s* task0 = task_lookup(0);
-    
-    *thread0 = (thread_ctrl_blk_s) {
-        .esp0     = (virt_addr_t)kernel_stack_top,
-        .esp      = (virt_addr_t)esp,
-        .cr3      = task0->cr3,
-        .id       = 0,
-        .task     = task0,
-        .state    = THREAD_STATE_RUNNING,
-        .priority = SCHED_IDLE_PRIORITY,
-        .quantum  = SCHED_QUANTUM
-    };
-
-    list_init(&thread0->task_link);
-    list_add_to_tail(&thread0->task_link, &task0->threads);
-    task0->nthreads++;
-
-    list_init(&thread0->run_link);
-    list_init(&thread0->wait_link);
-    
-    threads[0] = thread0;
-    running = thread0;
-}
-
-late_initcall(thread0_init);
+user_initcall(threading_init);

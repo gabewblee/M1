@@ -72,11 +72,3 @@ u16 pic_get_irr(void);
  * @return: The combined ISR value; bits 0-7 master, bits 8-15 slave.
  */
 u16 pic_get_isr(void);
-
-/**
- * pic_init - Initializes the 8259 programmable interrupt controller (PIC) with the
- *            given vector offsets.
- * @offset1: The vector offset for the master PIC, applied to IRQ 0-7.
- * @offset2: The vector offset for the slave PIC, applied to IRQ 8-15.
- */
-void __init pic_init(u8 offset1, u8 offset2);

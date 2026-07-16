@@ -17,6 +17,8 @@ extern u8          skernel[];
 extern u8          ekernel[];
 extern u8          sinit[];
 extern u8          einit[];
+extern u8          skheap[];
+extern u8          ekheap[];
 extern u32         swapper_pg_table_cnt;
 extern phys_addr_t mbi;
 
@@ -111,6 +113,56 @@ static u32 find_unmarked_run(u32 hint, u32 cnt) {
     return FRM_MAX_CNT;
 }
 
+static void __init pmm_init(multiboot_info_t* mbinfo) {
+    memset(bitmap, 0xFF, sizeof(bitmap));
+    uintptr_t cur = __va(mbinfo->mmap_addr);
+    uintptr_t end = cur + mbinfo->mmap_length;
+    while (cur < end) {
+        multiboot_memory_map_t* mmap = (multiboot_memory_map_t*)cur;
+        if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE)
+            bitmap_unmark_range((phys_addr_t)mmap->addr, (u32)mmap->len);
+
+        cur += mmap->size + sizeof(mmap->size);
+    }
+
+    /* Reserve null frame */
+    bitmap_mark_range(0, PG_SZ);
+
+    /* Reserve kernel and swapper page tables */
+    bitmap_mark_range(__pa(skernel), (u32)(ekernel - skernel) + swapper_pg_table_cnt * PG_SZ);
+
+    /* Reserve kernel heap */
+    bitmap_mark_range(__pa(skheap), (u32)(ekheap - skheap));
+
+    /* Reserve multiboot metadata */
+    bitmap_mark_range(__pa(mbinfo), sizeof(multiboot_info_t));
+    if (mbinfo->flags & MULTIBOOT_INFO_CMDLINE)
+        bitmap_mark_range(mbinfo->cmdline, (u32)(strlen((char*)__va(mbinfo->cmdline)) + 1));
+
+    if (mbinfo->flags & MULTIBOOT_INFO_BOOT_LOADER_NAME)
+        bitmap_mark_range(mbinfo->boot_loader_name, (u32)(strlen((char*)__va(mbinfo->boot_loader_name)) + 1));
+
+    if (mbinfo->flags & MULTIBOOT_INFO_MEM_MAP)
+        bitmap_mark_range(mbinfo->mmap_addr, mbinfo->mmap_length);
+
+    /* Reserve multiboot modules */
+    if (mbinfo->flags & MULTIBOOT_INFO_MODS) {
+        bitmap_mark_range(mbinfo->mods_addr, mbinfo->mods_count * sizeof(multiboot_module_t));
+
+        multiboot_module_t* mods = (multiboot_module_t*)__va(mbinfo->mods_addr);
+        for (u32 i = 0; i < mbinfo->mods_count; i++) {
+            if (mods[i].cmdline)
+                bitmap_mark_range(mods[i].cmdline, (u32)(strlen((char*)__va(mods[i].cmdline)) + 1));
+
+            bitmap_mark_range(mods[i].mod_start, mods[i].mod_end - mods[i].mod_start);
+        }
+    }
+}
+
+static void __init pmm_initcall(void) {
+    pmm_init((multiboot_info_t*)__va(mbi));
+}
+
 void pmm_free_init_section(void) {
     bitmap_unmark_range(__pa(sinit), (u32)(einit - sinit));
 }
@@ -150,51 +202,4 @@ void pmm_free_frms(phys_addr_t paddr, u32 cnt) {
         bitmap_unmark_bit(first + i);
 }
 
-void __init pmm_init(multiboot_info_t* mbinfo) {
-    memset(bitmap, 0xFF, sizeof(bitmap));
-    uintptr_t cur = __va(mbinfo->mmap_addr);
-    uintptr_t end = cur + mbinfo->mmap_length;
-    while (cur < end) {
-        multiboot_memory_map_t* mmap = (multiboot_memory_map_t*)cur;
-        if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE)
-            bitmap_unmark_range((phys_addr_t)mmap->addr, (u32)mmap->len);
-
-        cur += mmap->size + sizeof(mmap->size);
-    }
-
-    /* Reserve null frame */
-    bitmap_mark_range(0, PG_SZ);
-
-    /* Reserve kernel and swapper page tables */
-    bitmap_mark_range(__pa(skernel), (u32)(ekernel - skernel) + swapper_pg_table_cnt * PG_SZ);
-
-    /* Reserve multiboot metadata */
-    bitmap_mark_range(__pa(mbinfo), sizeof(multiboot_info_t));
-    if (mbinfo->flags & MULTIBOOT_INFO_CMDLINE)
-        bitmap_mark_range(mbinfo->cmdline, (u32)(strlen((char*)__va(mbinfo->cmdline)) + 1));
-
-    if (mbinfo->flags & MULTIBOOT_INFO_BOOT_LOADER_NAME)
-        bitmap_mark_range(mbinfo->boot_loader_name, (u32)(strlen((char*)__va(mbinfo->boot_loader_name)) + 1));
-
-    if (mbinfo->flags & MULTIBOOT_INFO_MEM_MAP)
-        bitmap_mark_range(mbinfo->mmap_addr, mbinfo->mmap_length);
-
-    /* Reserve multiboot modules */
-    if (mbinfo->flags & MULTIBOOT_INFO_MODS) {
-        bitmap_mark_range(mbinfo->mods_addr, mbinfo->mods_count * sizeof(multiboot_module_t));
-
-        multiboot_module_t* mods = (multiboot_module_t*)__va(mbinfo->mods_addr);
-        for (u32 i = 0; i < mbinfo->mods_count; i++) {
-            if (mods[i].cmdline)
-                bitmap_mark_range(mods[i].cmdline, (u32)(strlen((char*)__va(mods[i].cmdline)) + 1));
-
-            bitmap_mark_range(mods[i].mod_start, mods[i].mod_end - mods[i].mod_start);
-        }
-    }
-}
-
-static void __init pmm_initcall(void) {
-    pmm_init((multiboot_info_t*)__va(mbi));
-}
-
-core_initcall(pmm_initcall);
+mm_initcall(pmm_initcall);

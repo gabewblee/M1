@@ -127,6 +127,14 @@ static inline void split_blk(kheap_blk_hdr_s* hdr, size_t sz) {
     add_to_free_list(new);
 }
 
+static void __init kheap_init(void) {
+    size_t kheap_sz = ekheap - skheap;
+    kheap_blk_hdr_s* hdr = (kheap_blk_hdr_s*)skheap;
+    list_init(&free_list);
+    blk_init(hdr, kheap_sz, true);
+    add_to_free_list(hdr);
+}
+
 void* kzalloc(size_t sz) {
     void* ptr = kmalloc(sz);
     if (likely(ptr))
@@ -157,12 +165,4 @@ void kfree(void* ptr) {
     add_to_free_list(hdr);
 }
 
-void __init kheap_init(void) {
-    size_t kheap_sz = ekheap - skheap;
-    kheap_blk_hdr_s* hdr = (kheap_blk_hdr_s*)skheap;
-    list_init(&free_list);
-    blk_init(hdr, kheap_sz, true);
-    add_to_free_list(hdr);
-}
-
-core_initcall(kheap_init);
+mm_initcall(kheap_init);

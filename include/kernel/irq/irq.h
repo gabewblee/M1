@@ -3,22 +3,13 @@
 #include <compiler.h>
 #include <types.h>
 
-/**
- * irq_register_handler - Registers a handler for interrupt @irq. The handler
- *                        unblocks all threads waiting for interrupt @irq.
- * @irq: The interrupt number to register.
- * Returns: E_OK on success, or a negative error code on failure.
- */
-i32 irq_register_handler(u8 irq);
+typedef struct ntfn_s ntfn_s;
 
 /**
- * irq_wait_for - Waits for interrupt @irq to fire.
- * @irq: The interrupt number to wait for.
+ * irq_bind_ntfn - Binds @nt to interrupt @irq. Each time interrupt 
+ *                 @irq fires, @nt is signalled with bit @irq set.
+ * @irq: The interrupt number to bind.
+ * @nt: The notification to signal.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 irq_wait_for(u8 irq);
-
-/**
- * irq_init - Initializes the interrupt request (IRQ) subsystem.
- */
-void __init irq_init(void);
+i32 irq_bind_ntfn(u8 irq, ntfn_s* nt);

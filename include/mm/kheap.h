@@ -22,8 +22,3 @@ void* kmalloc(size_t sz);
  * @ptr: The pointer to the memory block to free.
  */
 void kfree(void* ptr);
-
-/**
- * kheap_init - Initializes the kernel heap.
- */
-void __init kheap_init(void);

@@ -8,8 +8,6 @@
 #include <kernel/core/sched.h>
 #include <kernel/core/task.h>
 #include <kernel/core/thread.h>
-#include <kernel/ipc/ipc.h>
-#include <kernel/ipc/servers.h>
 #include <kernel/irq/irq.h>
 #include <mm/kheap.h>
 #include <mm/page.h>

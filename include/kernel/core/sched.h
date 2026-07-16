@@ -3,6 +3,7 @@
 #include <arch/x86/idt.h>
 #include <config.h>
 #include <kernel/core/thread.h>
+#include <kernel/sync/spinlock.h>
 #include <libk/list.h>
 
 #define SCHED_PRIORITY_CNT  32                       /* Priority count            */
@@ -13,7 +14,7 @@
  * sched_pit_handler - Handles PIT interrupts.
  * @frm: The pointer to the interrupt stack frame.
  */
-void sched_pit_handler(int_frm_s* frm);
+void sched_pit_handler(ifrm_s* frm);
 
 /**
  * sched_ready - Prepares @thread for scheduling. Preempts the running thread if @thread 
@@ -23,11 +24,28 @@ void sched_pit_handler(int_frm_s* frm);
 void sched_ready(thread_ctrl_blk_s* thread);
 
 /**
+ * sched_enqueue - Prepares @thread for scheduling. Does not preempt the running thread
+ *                 if @thread has a higher priority.
+ * @thread: The thread to enqueue.
+ */
+void sched_enqueue(thread_ctrl_blk_s* thread);
+
+/**
  * sched_block - Blocks the running thread on @wait_queue with @state, then reschedules.
  * @wait_queue: The wait queue to block on.
  * @state: The blocked state to assign.
  */
 void sched_block(list_node_s* wait_queue, thread_state_e state);
+
+/**
+ * sched_block_and_release - Enqueues the running thread on @wait_queue with @state
+ *                           while @lock is held, releases @lock, then reschedules.
+ * @wait_queue: The wait queue to block on.
+ * @state: The blocked state to assign.
+ * @lock: The lock guarding @wait_queue, released before rescheduling.
+ * @flags: The EFLAGS returned by spin_lock_irqsave when @lock was acquired.
+ */
+void sched_block_and_release(list_node_s* wait_queue, thread_state_e state, spinlock_s* lock, u32 flags);
 
 /**
  * sched_unblock - Unblocks @thread, then prepares it for scheduling.
@@ -49,9 +67,3 @@ void __noreturn sched_zombify(void);
  * sched_reap_zombies - Reaps zombie threads.
  */
 void sched_reap_zombies(void);
-
-/**
- * sched_init - Initializes the run/zombie queues, the locking structures, and the PIT
- *              interrupt handler.
- */
-void __init sched_init(void);

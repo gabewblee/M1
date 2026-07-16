@@ -7,28 +7,20 @@
 
 #define VGA_BUF_SZ (sizeof(((vga_server_req_s*)0)->buf))
 
-static i32 vga_task_id = -(i32)E_INVAL;
-
 static i32 call_vga_server(enum vga_server_op_e op, vga_server_req_s* req) {
-    if (vga_task_id < 0)
-        vga_task_id = sys_server_lookup(SERVER_ID_vga);
+    ipc_msg_s msg;
+    memcpy(msg.payload, req, sizeof(vga_server_req_s));
 
-    ipc_packet_s packet = (ipc_packet_s) {
-        .hdr = {
-            .op = (u32)op,
-            .sz = (u32)sizeof(vga_server_req_s)
-        }
-    };
-    memcpy(packet.payload, req, sizeof(vga_server_req_s));
+    msg_info_t mi = mk_msg_info((u32)op, 0, (u32)sizeof(vga_server_req_s));
+    i32 rep = sys_call(SERVICE_CPTR_VGA, mi, &msg, 0);
+    if (rep < 0)
+        return rep;
 
-    i32 ret = sys_ipc_call((u32)vga_task_id, &packet);
-    if (ret != E_OK)
-        return ret;
+    i32 status = E_OK;
+    if (get_msg_len((msg_info_t)rep) >= sizeof(i32))
+        memcpy(&status, msg.payload, sizeof(i32));
 
-    if (packet.hdr.sz >= sizeof(i32))
-        memcpy(&ret, packet.payload, sizeof(i32));
-
-    return ret;
+    return status;
 }
 
 static i32 print_unsigned_int(u32 val, u32 base, i32 uppercase) {

@@ -1,3 +1,4 @@
+#include <uapi/errno.h>
 #include <uapi/kbd.h>
 #include <uapi/uapi.h>
 #include <userspace/libc/stdio.h>
@@ -11,18 +12,17 @@ const server_handler_f kbd_handlers[SERVER_OP_MAX] = {
     KBD_SERVER_OPS(SERVER_OP_ENTRY)
 };
 
-static i32 handle_read(ipc_packet_s* packet) {
+static i32 handle_read(ipc_msg_s* msg) {
     kbd_event_s event;
     ps2_kbd_read(&event);
     
-    kbd_server_reply_s* rep = (kbd_server_reply_s*)packet->payload;
+    kbd_server_reply_s* rep = (kbd_server_reply_s*)msg->payload;
     *rep = (kbd_server_reply_s) {
         .ret   = E_OK,
         .event = event
     };
 
-    packet->hdr.sz = sizeof(kbd_server_reply_s);
-    return rep->ret;
+    return (i32)sizeof(kbd_server_reply_s);
 }
 
 i32 init(void) {

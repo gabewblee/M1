@@ -2,10 +2,12 @@
 #include <dev/console.h>
 #include <dev/evga.h>
 #include <dev/klog.h>
+#include <dev/serial.h>
 
-#define CONSOLES(X)    \
-    X(klog, KLOG_FLAG) \
-    X(evga, EVGA_FLAG)
+#define CONSOLES(X)      \
+    X(klog,   KLOG_FLAG) \
+    X(evga,   EVGA_FLAG) \
+    X(serial, SERIAL_FLAG)
 
 #define CONSOLE_DEF(name, flag) \
     static console_s name = {   \
@@ -64,9 +66,9 @@ void console_clear(u32 flags) {
 }
 
 void console_init(void) {
-    #define CONSOLE_REGISTER_DEV(name, flag) console_register(name);
-    CONSOLES(CONSOLE_REGISTER_DEV)
-    #undef CONSOLE_REGISTER_DEV
+    #define CONSOLE_REGISTER(name, flag) console_register(name);
+    CONSOLES(CONSOLE_REGISTER)
+    #undef CONSOLE_REGISTER
     for (size_t i = 0; i < cnt; i++)
         consoles[i].init();
 }

@@ -1,3 +1,5 @@
+#include <uapi/servers.h>
+#include <userspace/libc/capability.h>
 #include <userspace/libc/syscall.h>
 #include <userspace/ps2/kbd/driver.h>
 #include <userspace/ps2/kbd/keymaps/keymap.h>
@@ -34,7 +36,7 @@ void ps2_kbd_read(kbd_event_s* event) {
         if (cnt != 0)
             break;
 
-        sys_irq_wait_for(PS2_KBD_IRQ);
+        sys_wait(SERVICE_CPTR_NTFN, 0);
     }
 
     *event = events[tail];
@@ -43,5 +45,5 @@ void ps2_kbd_read(kbd_event_s* event) {
 }
 
 void ps2_kbd_init(void) {
-    sys_irq_register_handler(PS2_KBD_IRQ);
+    irq_handler_set_ntfn(SERVICE_CPTR_IRQ, SERVICE_CPTR_NTFN, SERVICE_CNODE_DEPTH);
 }

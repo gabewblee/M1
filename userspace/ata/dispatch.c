@@ -1,13 +1,13 @@
 #include <uapi/ata.h>
+#include <uapi/errno.h>
+#include <uapi/servers.h>
 #include <userspace/ata/dispatch.h>
 #include <userspace/ata/driver.h>
 #include <userspace/ata/pio/pio.h>
+#include <userspace/libc/capability.h>
 #include <userspace/libc/stdio.h>
 #include <userspace/libc/string.h>
 #include <userspace/libc/syscall.h>
-
-#define ATA_PRIMARY_BUS_IRQ   14 /* ATA primary bus IRQ number   */
-#define ATA_SECONDARY_BUS_IRQ 15 /* ATA secondary bus IRQ number */
 
 ATA_SERVER_OPS(SERVER_OP_DECL)
 
@@ -42,9 +42,9 @@ static void print_drv_info(u32 idx, ata_drv_s* drv) {
     printf("  Total sectors: %d\n",     drv->lba48 ? drv->total48 : drv->total28);
 }
 
-static i32 handle_info(ipc_packet_s* packet) {
+static i32 handle_info(ipc_msg_s* msg) {
     ata_server_reply_s rep = {0};
-    ata_server_req_s* req = (ata_server_req_s*)packet->payload;
+    ata_server_req_s* req = (ata_server_req_s*)msg->payload;
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
     if (!drv) {
@@ -58,13 +58,12 @@ static i32 handle_info(ipc_packet_s* packet) {
         rep.info.sectors = drv->lba48 ? drv->total48 : drv->total28;
     }
 
-    packet->hdr.sz = (u32)sizeof(rep);
-    memcpy(packet->payload, &rep, sizeof(rep));
-    return rep.ret;
+    memcpy(msg->payload, &rep, sizeof(rep));
+    return (i32)sizeof(rep);
 }
 
-static i32 handle_read(ipc_packet_s* packet) {
-    ata_server_req_s* req = (ata_server_req_s*)packet->payload;
+static i32 handle_read(ipc_msg_s* msg) {
+    ata_server_req_s* req = (ata_server_req_s*)msg->payload;
     ata_server_reply_s rep = {0};
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
@@ -75,13 +74,12 @@ static i32 handle_read(ipc_packet_s* packet) {
         rep.done = (rep.ret == E_OK) ? req->cnt : 0;
     }
 
-    packet->hdr.sz = (u32)sizeof(rep);
-    memcpy(packet->payload, &rep, sizeof(rep));
-    return rep.ret;
+    memcpy(msg->payload, &rep, sizeof(rep));
+    return (i32)sizeof(rep);
 }
 
-static i32 handle_write(ipc_packet_s* packet) {
-    ata_server_req_s* req = (ata_server_req_s*)packet->payload;
+static i32 handle_write(ipc_msg_s* msg) {
+    ata_server_req_s* req = (ata_server_req_s*)msg->payload;
     ata_server_reply_s rep = {0};
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
@@ -92,17 +90,16 @@ static i32 handle_write(ipc_packet_s* packet) {
         rep.done = (rep.ret == E_OK) ? req->cnt : 0;
     }
 
-    packet->hdr.sz = (u32)sizeof(rep);
-    memcpy(packet->payload, &rep, sizeof(rep));
-    return rep.ret;
+    memcpy(msg->payload, &rep, sizeof(rep));
+    return (i32)sizeof(rep);
 }
 
 i32 init(void) {
-    i32 ret = sys_irq_register_handler(ATA_PRIMARY_BUS_IRQ);
+    i32 ret = irq_handler_set_ntfn(SERVICE_CPTR_IRQ, SERVICE_CPTR_NTFN, SERVICE_CNODE_DEPTH);
     if (ret != E_OK)
         return ret;
 
-    ret = sys_irq_register_handler(ATA_SECONDARY_BUS_IRQ);
+    ret = irq_handler_set_ntfn(SERVICE_CPTR_IRQ2, SERVICE_CPTR_NTFN, SERVICE_CNODE_DEPTH);
     if (ret != E_OK)
         return ret;
 

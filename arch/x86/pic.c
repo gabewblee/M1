@@ -8,6 +8,14 @@ static u16 get_irq_reg(int ocw3) {
     return (inb(PIC2_COMMAND) << 8) | inb(PIC1_COMMAND);
 }
 
+static void __init pic_init(u8 offset1, u8 offset2) {
+    pic_remap(offset1, offset2);
+}
+
+static void __init pic_initcall(void) {
+    pic_init(0x20, 0x28);
+}
+
 void pic_send_eoi(u8 irq) {
     if (irq >= 8)
         outb(PIC2_COMMAND, PIC_EOI);
@@ -88,12 +96,4 @@ u16 pic_get_isr(void) {
     return get_irq_reg(PIC_READ_ISR);
 }
 
-void __init pic_init(u8 offset1, u8 offset2) {
-    pic_remap(offset1, offset2);
-}
-
-static void __init pic_initcall(void) {
-    pic_init(0x20, 0x28);
-}
-
-early_initcall(pic_initcall);
+arch_initcall(pic_initcall);

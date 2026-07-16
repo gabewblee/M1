@@ -1,12 +1,9 @@
 #include <kernel/core/initcall.h>
 #include <kernel/core/panic.h>
 #include <kernel/core/task.h>
-#include <kernel/ipc/ipc.h>
 #include <libk/string.h>
 #include <mm/kheap.h>
 #include <stddef.h>
-
-task_ctrl_blk_s* task0;
 
 static task_ctrl_blk_s* tasks[TASK_MAX_CNT];
 
@@ -15,16 +12,10 @@ static task_ctrl_blk_s* task_init(phys_addr_t cr3) {
     if (unlikely(!task))
         return NULL;
 
-    *task = (task_ctrl_blk_s) {
-        .id   = 0,
-        .cr3  = cr3,
-        .port = port_create(IPC_QUEUE_CAP)
+    *task = (task_ctrl_blk_s){
+        .id  = 0,
+        .cr3 = cr3,
     };
-
-    if (unlikely(!task->port)) {
-        kfree(task);
-        return NULL;
-    }
 
     list_init(&task->threads);
     return task;
@@ -42,6 +33,17 @@ static inline i32 alloc_task_id(task_ctrl_blk_s* task) {
     return -1;
 }
 
+static void __init tasking_init(void) {
+    u32 cr3;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
+
+    task_ctrl_blk_s* task = task_init(cr3);
+    if (unlikely(!task))
+        PANIC("Error: Failed to initialize alpha");
+    
+    tasks[0] = task;
+}
+
 task_ctrl_blk_s* task_lookup(u32 id) {
     return (unlikely(id >= TASK_MAX_CNT)) ? NULL : tasks[id];
 }
@@ -52,35 +54,22 @@ task_ctrl_blk_s* task_create(phys_addr_t cr3) {
         return NULL;
 
     if (unlikely(alloc_task_id(task) < 0)) {
-        port_destroy(task->port);
         kfree(task);
         return NULL;
     }
+    
     return task;
 }
 
 void task_destroy(task_ctrl_blk_s* task) {
-    if (unlikely(task == task0))
+    if (unlikely(task == tasks[0]))
         return;
 
     if (unlikely(task->nthreads != 0))
         PANIC("Error: Failed to destroy task with live threads");
 
     tasks[task->id] = NULL;
-    port_destroy(task->port);
     kfree((void*)task);
 }
 
-void __init task0_init(void) {
-    u32 cr3;
-    __asm__ volatile ("mov %%cr3, %0" : "=r"(cr3));
-
-    task_ctrl_blk_s* task = task_init(cr3);
-    if (unlikely(!task))
-        PANIC("Error: Failed to initialize task0");
-    
-    tasks[0] = task;
-    task0 = task;
-}
-
-late_initcall(task0_init);
+user_initcall(tasking_init);

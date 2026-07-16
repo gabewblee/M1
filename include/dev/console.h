@@ -4,15 +4,16 @@
 #include <types.h>
 
 /* One-hot encoding for console selection */
-#define KLOG_FLAG (1u << 0)               /* Selects kernel log console */
-#define EVGA_FLAG (1u << 1)               /* Selects early VGA console  */
-#define ALL_FLAG  (KLOG_FLAG | EVGA_FLAG) /* Selects all consoles       */
+#define KLOG_FLAG   (1u << 0)                             /* Selects kernel log console  */
+#define EVGA_FLAG   (1u << 1)                             /* Selects early VGA console   */
+#define SERIAL_FLAG (1u << 2)                             /* Selects COM1 serial console */
+#define ALL_FLAG    (KLOG_FLAG | EVGA_FLAG | SERIAL_FLAG) /* Selects all consoles        */
 
 typedef struct console_s {
     u32  flags;                           /* Selects console     */
     void (*putc)(char c);                 /* Writes a character  */
     void (*puts)(char* str);              /* Writes a string     */
-    void (*write)(char* str, size_t len); /* Writes a buffer     */
+    void (*write)(char* buf, size_t len); /* Writes a buffer     */
     void (*clear)(void);                  /* Clears console      */
     void (*init)(void);                   /* Initializes console */
 } console_s;
