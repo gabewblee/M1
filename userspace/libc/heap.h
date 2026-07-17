@@ -2,11 +2,11 @@
 
 #include <uapi/types.h>
 
-#define VFS_HEAP_PG    128u        /* Arena size in pages         */
-#define HEAP_ALIGN     8u          /* Minimum object alignment    */
-#define HEAP_LARGEST   2048u       /* Largest size-class object   */
-#define SHRINKER_MAX   4u          /* Registered shrinker limit   */
-#define SHRINK_ALL     0xFFFFFFFFu /* Reclaim as much as possible */
+#define HEAP_ARENA_PG 128u        /* Arena size in pages         */
+#define HEAP_ALIGN    8u          /* Minimum object alignment    */
+#define HEAP_LARGEST  2048u       /* Largest size-class object   */
+#define SHRINKER_MAX  4u          /* Registered shrinker limit   */
+#define SHRINK_ALL    0xFFFFFFFFu /* Reclaim as much as possible */
 
 typedef struct cache_s {
     const char* name;     /* Cache name for diagnostics    */

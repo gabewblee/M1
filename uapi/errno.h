@@ -20,3 +20,4 @@
 #define E_NODEV    17u /* No such device            */
 #define E_BUSY     18u /* Resource busy             */
 #define E_NOSPC    19u /* No space left on device   */
+#define E_IO       20u /* Input/output error        */

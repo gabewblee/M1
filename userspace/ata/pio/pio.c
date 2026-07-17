@@ -106,16 +106,16 @@ static i32 ata_write_lba28(ata_drv_s* drv, u64 lba, u8 cnt, void* buf) {
     u32 total = (!cnt) ? 256u : (u32)cnt;
 
     for (u32 sec = 0; sec < total; sec++) {
-        i32 ret = ata_irq_wait();
-        if (ret != E_OK)
-            return ret;
-
-        ret = ata_data_wait(channel);
+        i32 ret = ata_data_wait(channel);
         if (ret != E_OK)
             return ret;
 
         for (u32 idx = 0; idx < 256u; idx++)
             outw(ata_reg_port(channel, ATA_DATA_REG_OFFSET), words[sec * 256u + idx]);
+
+        ret = ata_irq_wait();
+        if (ret != E_OK)
+            return ret;
     }
 
     ata_write_reg(channel, ATA_CMD_REG_OFFSET, ATA_FLUSH_CMD);
@@ -155,16 +155,16 @@ static i32 ata_write_lba48(ata_drv_s* drv, u64 lba, u16 cnt, void* buf) {
     ata_issue_lba48(drv, lba, cnt, ATA_WRITE48_CMD);
     u32 total = (!cnt) ? 65536u : (u32)cnt;
     for (u32 sec = 0; sec < total; sec++) {
-        i32 ret = ata_irq_wait();
-        if (ret != E_OK)
-            return ret;
-
-        ret = ata_data_wait(channel);
+        i32 ret = ata_data_wait(channel);
         if (ret != E_OK)
             return ret;
 
         for (u32 idx = 0; idx < 256u; idx++)
             outw(ata_reg_port(channel, ATA_DATA_REG_OFFSET), words[sec * 256u + idx]);
+
+        ret = ata_irq_wait();
+        if (ret != E_OK)
+            return ret;
     }
 
     ata_write_reg(channel, ATA_CMD_REG_OFFSET, ATA_FLUSH_CMD);

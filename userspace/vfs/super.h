@@ -3,40 +3,36 @@
 #include <userspace/vfs/vfs.h>
 
 /**
- * super_init - Initializes the superblock cache.
+ * super_init - Initializes the remote superblock cache.
  */
 void super_init(void);
 
 /**
- * fstype_register - Adds @fstype to the filesystem registry.
- * @fstype: The filesystem type to register.
+ * fstype_find - Returns the filesystem type named @name, or NULL.
+ * @name: The filesystem name to look up.
+ * Returns: The filesystem type, or NULL if not found.
+ */
+const fstype_s* fstype_find(const char* name);
+
+/**
+ * rsb_mount - Asks @fstype's server to mount @source, wrapping the result.
+ * @fstype: The filesystem type to mount.
+ * @source: The backing source, filesystem-defined.
+ * @flags: The mount flags.
+ * @result: Filled with a referenced remote superblock on success.
  * Returns: E_OK on success, or a negative error code on failure.
  */
-i32 fstype_register(fstype_s* fstype);
+i32 rsb_mount(const fstype_s* fstype, const char* source, u32 flags, rsb_s** result);
 
 /**
- * fstype_find - Returns the registered filesystem named @name, or NULL.
- * @name: The filesystem name to look up.
- * Returns: The registered filesystem, or NULL if not found.
+ * rsb_get - Takes a reference on @sb.
+ * @sb: The remote superblock to reference.
+ * Returns: @sb.
  */
-fstype_s* fstype_find(const char* name);
+rsb_s* rsb_get(rsb_s* sb);
 
 /**
- * super_alloc - Allocates a superblock for @fstype, or NULL when out of memory.
- * @fstype: The filesystem type to allocate for.
- * Returns: The new superblock, or NULL when out of memory.
+ * rsb_put - Drops a reference, unmounting the remote superblock at zero.
+ * @sb: The remote superblock to drop a reference on.
  */
-super_block_s* super_alloc(const fstype_s* fstype);
-
-/**
- * super_kill - Runs the filesystem teardown, evicts leftover inodes, and frees @sb.
- * @sb: The superblock to tear down.
- */
-void super_kill(super_block_s* sb);
-
-/**
- * super_ino - Returns the next unused inode number on @sb.
- * @sb: The superblock to allocate from.
- * Returns: The next unused inode number.
- */
-u32 super_ino(super_block_s* sb);
+void rsb_put(rsb_s* sb);

@@ -1,13 +1,145 @@
 #include <uapi/errno.h>
 #include <uapi/servers.h>
 #include <uapi/vga.h>
+#include <userspace/libc/minmax.h>
 #include <userspace/libc/stdio.h>
 #include <userspace/libc/string.h>
 #include <userspace/libc/syscall.h>
 
+#define PRINTF_MAX 256u
 #define VGA_BUF_SZ (sizeof(((vga_server_req_s*)0)->buf))
 
-static i32 call_vga_server(enum vga_server_op_e op, vga_server_req_s* req) {
+typedef struct fmt_sink_s {
+    char*  buf;  /* Destination buffer            */
+    size_t size; /* Destination capacity in bytes */
+    size_t used; /* Characters emitted so far     */
+} fmt_sink_s;
+
+static void sink_putc(fmt_sink_s* sink, char c) {
+    if (sink->used + 1u < sink->size)
+        sink->buf[sink->used] = c;
+
+    sink->used++;
+}
+
+static void sink_pad(fmt_sink_s* sink, char pad, u32 width, u32 len) {
+    for (u32 i = len; i < width; i++)
+        sink_putc(sink, pad);
+}
+
+static void sink_unsigned(fmt_sink_s* sink, u32 value, u32 base, char pad, u32 width) {
+    char digits[16];
+    u32 n = 0;
+    do {
+        u32 digit = value % base;
+        digits[n++] = (char)(digit < 10u ? '0' + digit : 'a' + digit - 10u);
+        value /= base;
+    } while (value);
+
+    sink_pad(sink, pad, width, n);
+    while (n)
+        sink_putc(sink, digits[--n]);
+}
+
+static void sink_signed(fmt_sink_s* sink, i32 value, char pad, u32 width) {
+    u32 magnitude = (u32)value;
+    u32 len = 1;
+    if (value < 0) {
+        magnitude = ~(u32)value + 1u;
+        len++;
+    }
+
+    for (u32 rest = magnitude; rest >= 10u; rest /= 10u)
+        len++;
+
+    if (value < 0 && pad == '0') {
+        sink_putc(sink, '-');
+        sink_pad(sink, pad, width, len);
+        sink_unsigned(sink, magnitude, 10, ' ', 0);
+        return;
+    }
+
+    sink_pad(sink, pad, width, len);
+    if (value < 0)
+        sink_putc(sink, '-');
+
+    sink_unsigned(sink, magnitude, 10, ' ', 0);
+}
+
+i32 vsnprintf(char* buf, size_t size, const char* fmt, va_list args) {
+    fmt_sink_s sink = { buf, size, 0 };
+    while (*fmt) {
+        if (*fmt != '%') {
+            sink_putc(&sink, *fmt++);
+            continue;
+        }
+
+        fmt++;
+        char pad = ' ';
+        if (*fmt == '0') {
+            pad = '0';
+            fmt++;
+        }
+
+        u32 width = 0;
+        while (*fmt >= '0' && *fmt <= '9')
+            width = width * 10u + (u32)(*fmt++ - '0');
+
+        switch (*fmt++) {
+            case '%':
+                sink_putc(&sink, '%');
+                break;
+
+            case 'c':
+                sink_pad(&sink, ' ', width, 1);
+                sink_putc(&sink, (char)va_arg(args, int));
+                break;
+
+            case 's': {
+                const char* s = va_arg(args, const char*);
+                if (!s)
+                    s = "(null)";
+
+                sink_pad(&sink, ' ', width, (u32)strlen(s));
+                while (*s)
+                    sink_putc(&sink, *s++);
+
+                break;
+            }
+
+            case 'd':
+                sink_signed(&sink, va_arg(args, i32), pad, width);
+                break;
+
+            case 'u':
+                sink_unsigned(&sink, va_arg(args, u32), 10, pad, width);
+                break;
+
+            case 'x':
+                sink_unsigned(&sink, va_arg(args, u32), 16, pad, width);
+                break;
+
+            default:
+                sink_putc(&sink, '?');
+                break;
+        }
+    }
+
+    if (size)
+        buf[min(sink.used, size - 1u)] = '\0';
+
+    return (i32)sink.used;
+}
+
+i32 snprintf(char* buf, size_t size, const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    i32 n = vsnprintf(buf, size, fmt, args);
+    va_end(args);
+    return n;
+}
+
+static i32 call_vga_server(vga_server_op_e op, vga_server_req_s* req) {
     ipc_msg_s msg;
     memcpy(msg.payload, req, sizeof(vga_server_req_s));
 
@@ -23,113 +155,6 @@ static i32 call_vga_server(enum vga_server_op_e op, vga_server_req_s* req) {
     return status;
 }
 
-static i32 print_unsigned_int(u32 val, u32 base, i32 uppercase) {
-    char buf[32]; size_t n = 0; i32 cnt = 0;
-    if (val == 0)
-        return putc('0');
-
-    while (val > 0) {
-        u32 digit = val % base;
-        val /= base;
-        buf[n++] = (char)(digit < 10 ? '0' + digit : (uppercase ? 'A' : 'a') + digit - 10);
-    }
-
-    while (n > 0) {
-        i32 ret = putc(buf[--n]);
-        if (ret != E_OK)
-            return ret;
-
-        cnt++;
-    }
-
-    return cnt;
-}
-
-static i32 print_signed_int(i32 val) {
-    if (val < 0) {
-        i32 ret = putc('-');
-        if (ret != E_OK)
-            return ret;
-
-        ret = print_unsigned_int((u32)(-(val + 1)) + 1u, 10, 0);
-        return (ret < 0) ? ret : ret + 1;
-    }
-
-    return print_unsigned_int((u32)val, 10, 0);
-}
-
-static i32 vprintf(char* fmt, va_list ap) {
-    i32 cnt = 0;
-    while (*fmt != '\0') {
-        if (*fmt != '%') {
-            i32 ret = putc(*fmt++);
-            if (ret != E_OK)
-                return ret;
-
-            cnt++;
-            continue;
-        }
-
-        fmt++;
-        switch (*fmt++) {
-            case '%':
-                if (putc('%') != E_OK)
-                    return -(i32)E_FAULT;
-
-                cnt++;
-                break;
-            case 's': {
-                char* str = va_arg(ap, char*);
-                if (!str)
-                    str = "(null)";
-                
-                i32 ret = write(str, strlen(str));
-                if (ret < 0)
-                    return ret;
-
-                cnt += ret;
-                break;
-            }
-            case 'c': {
-                int c = va_arg(ap, int);
-                if (putc(c) != E_OK)
-                    return -(i32)E_FAULT;
-
-                cnt++;
-                break;
-            }
-            case 'd': {
-                i32 ret = print_signed_int(va_arg(ap, i32));
-                if (ret < 0)
-                    return ret;
-
-                cnt += ret;
-                break;
-            }
-            case 'u': {
-                i32 ret = print_unsigned_int(va_arg(ap, u32), 10, 0);
-                if (ret < 0)
-                    return ret;
-
-                cnt += ret;
-                break;
-            }
-            case 'x': {
-                i32 ret = print_unsigned_int(va_arg(ap, u32), 16, 0);
-                if (ret < 0)
-                    return ret;
-                
-                cnt += ret;
-                break;
-            }
-            default:
-                return -(i32)E_INVAL;
-        }
-    }
-
-    return cnt;
-}
-
 i32 putc(int c) {
     vga_server_req_s req = {
         .len = 1,
@@ -139,18 +164,19 @@ i32 putc(int c) {
     return call_vga_server(VGA_SERVER_OP_putc, &req);
 }
 
-i32 puts(char* str) {
+i32 puts(const char* str) {
     i32 ret = write(str, strlen(str));
     if (ret < 0)
         return ret;
 
-    if (putc('\n') != E_OK)
-        return -(i32)E_FAULT;
+    i32 nl = putc('\n');
+    if (nl != E_OK)
+        return nl;
 
     return ret + 1;
 }
 
-i32 write(char* buf, size_t len) {
+i32 write(const char* buf, size_t len) {
     size_t total = 0;
     while (total < len) {
         size_t chunk = len - total;
@@ -171,10 +197,31 @@ i32 write(char* buf, size_t len) {
     return (i32)total;
 }
 
-i32 printf(char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    i32 ret = vprintf(fmt, ap);
-    va_end(ap);
-    return ret;
+i32 clear(void) {
+    vga_server_req_s req = {0};
+    return call_vga_server(VGA_SERVER_OP_clear, &req);
+}
+
+i32 printf(const char* fmt, ...) {
+    char buf[PRINTF_MAX];
+    va_list args;
+    va_start(args, fmt);
+    i32 n = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (n < 0)
+        return n;
+
+    return write(buf, min((size_t)n, sizeof(buf) - 1u));
+}
+
+i32 dprintf(const char* fmt, ...) {
+    char buf[PRINTF_MAX];
+    va_list args;
+    va_start(args, fmt);
+    i32 n = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    if (n < 0)
+        return n;
+
+    return sys_dbg_puts(buf, min((u32)n, (u32)sizeof(buf) - 1u));
 }

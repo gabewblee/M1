@@ -31,6 +31,11 @@ static const bootinfo_s* bi;
 static u32               nxt; /* Next usable slot              */
 static u32               end; /* One past the last usable slot */
 static modinfo_s         infos[BOOTINFO_MAX_MOD_CNT];
+static u32               shm_frms[SHM_WIN_CNT][SHM_WIN_PG];
+static u8                shm_tabled[BOOTINFO_MAX_MOD_CNT];
+
+_Static_assert(PG_DIR_IDX(SHM_WIN_VADDR(SHM_WIN_CNT) - 1u) == PG_DIR_IDX(SHM_WIN_BASE),
+               "Error: Shared windows must share one page table");
 
 static u32 cstrlen(const char* s) {
     u32 n;
@@ -204,6 +209,29 @@ static i32 find_ctx(u32 server_id) {
     return -1;
 }
 
+static void wire_shm_win(u32 i, u32 win) {
+    if (win >= SHM_WIN_CNT)
+        fatal("Invalid shared window ID");
+
+    modinfo_s* info = &infos[i];
+    if (!shm_tabled[i]) {
+        u32 table = mk_obj(CAPABILITY_TYPE_PG_TABLE, 0);
+        if (map_pg_table(table, info->vspace, ROOT_CNODE_RADIX, SHM_WIN_BASE) != E_OK)
+            fatal("Failed to map shared window table");
+
+        shm_tabled[i] = 1;
+    }
+
+    for (u32 p = 0; p < SHM_WIN_PG; p++) {
+        if (!shm_frms[win][p])
+            shm_frms[win][p] = mk_obj(CAPABILITY_TYPE_FRM, 0);
+
+        u32 vaddr = SHM_WIN_VADDR(win) + p * PG_SZ;
+        if (map_pg(shm_frms[win][p], info->vspace, ROOT_CNODE_RADIX, vaddr, PG_RW_FLAG) != E_OK)
+            fatal("Failed to map shared window page");
+    }
+}
+
 static void wire(u32 i) {
     const mod_s* mod = &bi->mods[i];
     modinfo_s* info = &infos[i];
@@ -231,6 +259,10 @@ static void wire(u32 i) {
                 mint_capability_into(infos[target].ep, info->cnode, res->slot, info->badge);
                 break;
             }
+
+            case RESOURCE_TYPE_SHM_WIN:
+                wire_shm_win(i, res->arg);
+                break;
 
             default:
                 fatal("Unknown resource type");

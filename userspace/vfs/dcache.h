@@ -23,11 +23,11 @@ void dcache_init(void);
 dentry_s* d_alloc(dentry_s* parent, const qstr_s* name);
 
 /**
- * d_instantiate - Binds @inode to @dentry, consuming one inode reference.
+ * d_instantiate - Binds @node to @dentry, consuming one node reference.
  * @dentry: The dentry to bind.
- * @inode: The inode to bind, its reference consumed.
+ * @node: The node to bind, its reference consumed.
  */
-void d_instantiate(dentry_s* dentry, inode_s* inode);
+void d_instantiate(dentry_s* dentry, rnode_s* node);
 
 /**
  * d_rehash - Inserts @dentry into the dentry hash.
@@ -36,11 +36,11 @@ void d_instantiate(dentry_s* dentry, inode_s* inode);
 void d_rehash(dentry_s* dentry);
 
 /**
- * d_add - Binds @inode to @dentry and hashes it.
+ * d_add - Binds @node to @dentry and hashes it.
  * @dentry: The dentry to bind and hash.
- * @inode: The inode to bind, its reference consumed.
+ * @node: The node to bind, its reference consumed.
  */
-void d_add(dentry_s* dentry, inode_s* inode);
+void d_add(dentry_s* dentry, rnode_s* node);
 
 /**
  * d_drop - Removes @dentry from the dentry hash.
@@ -78,12 +78,6 @@ void d_move(dentry_s* dentry, dentry_s* target);
 int d_is_ancestor(dentry_s* dentry, dentry_s* child);
 
 /**
- * d_genocide - Drops the filesystem pin of every positive descendant of @root.
- * @root: The dentry whose descendants are unpinned.
- */
-void d_genocide(dentry_s* root);
-
-/**
  * dget - Takes a reference on @dentry, reviving it from the LRU if needed.
  * @dentry: The dentry to reference.
  * Returns: @dentry.
@@ -102,6 +96,12 @@ void dput(dentry_s* dentry);
  * Returns: The number of dentries reclaimed.
  */
 u32 dcache_shrink(u32 count);
+
+/**
+ * dcache_prune_sb - Reclaims every unreferenced dentry belonging to @sb.
+ * @sb: The remote superblock whose dentries are reclaimed.
+ */
+void dcache_prune_sb(const rsb_s* sb);
 
 /**
  * dcache_stats - Returns the dentry cache counters.

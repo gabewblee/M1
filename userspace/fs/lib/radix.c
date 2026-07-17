@@ -1,7 +1,7 @@
 #include <uapi/uapi.h>
 #include <userspace/libc/string.h>
-#include <userspace/vfs/heap.h>
-#include <userspace/vfs/radix.h>
+#include <userspace/libc/heap.h>
+#include <userspace/fs/lib/radix.h>
 
 typedef struct radix_node_s {
     u32   count;             /* Populated slot count */

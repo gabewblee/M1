@@ -22,12 +22,14 @@ typedef enum ata_kind_e {
     ATA_KIND_SATAPI = 4
 } ata_kind_e;
 
+#define ATA_SECTOR_SZ 512u /* Sector size in bytes */
+
 typedef struct ata_server_req_s {
-    u8  drv;   /* Drive index                     */
-    u8  cnt;   /* Sector count                    */
-    u16 flags; /* Reserved                        */
-    u64 lba;   /* Absolute sector address         */
-    u32 buf;   /* Buffer address in caller memory */
+    u8  drv; /* Drive index                 */
+    u8  cnt; /* Sector count                */
+    u16 win; /* Shared transfer window ID   */
+    u32 off; /* Byte offset into the window */
+    u64 lba; /* Absolute sector address     */
 } ata_server_req_s;
 
 typedef struct ata_server_info_s {

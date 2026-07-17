@@ -30,12 +30,12 @@
         __VA_ARGS__          \
     }
 
-#define IGN8                                                    \
-    [0x00] = NONE, [0xAA] = NONE, [0xEE] = NONE, [0xFA] = NONE, \
+#define IGN6                                     \
+    [0x00] = NONE, [0xEE] = NONE, [0xFA] = NONE, \
     [0xFC] = NONE, [0xFD] = NONE, [0xFE] = NONE, [0xFF] = NONE
 
-ROW(idle, KEY, IGN8, [0xE0] = TRANSITION(EXT, 0), [0xE1] = TRANSITION(P5, 0));
-ROW(ext, XKEY, IGN8);
+ROW(idle, KEY, IGN6, [0xE0] = TRANSITION(EXT, 0), [0xE1] = TRANSITION(P5, 0));
+ROW(ext, XKEY, IGN6, [0x2A] = NONE, [0xAA] = NONE);
 ROW(p5, TRANSITION(P4, 0));
 ROW(p4, TRANSITION(P3, 0));
 ROW(p3, TRANSITION(P2, 0));

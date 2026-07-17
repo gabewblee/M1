@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mm.h>
 #include <types.h>
 
 typedef enum server_id_e {
@@ -7,8 +8,13 @@ typedef enum server_id_e {
     SERVER_ID_keyboard = 1, /* PS/2 kbd server ID */
     SERVER_ID_ata      = 2, /* ATA server ID      */
     SERVER_ID_vfs      = 3, /* VFS server ID      */
-    SERVER_ID_CNT      = 4, /* Server count       */
+    SERVER_ID_tmpfs    = 4, /* tmpfs server ID    */
+    SERVER_ID_ext2     = 5, /* ext2 server ID     */
+    SERVER_ID_shell    = 6, /* Shell program ID   */
+    SERVER_ID_CNT      = 7, /* Server count       */
 } server_id_e;
+
+#define SERVER_BADGE(id) ((id) + 1u) /* Endpoint badge of a server */
 
 #define SERVICE_CNODE_RADIX 4u          /* log2(server CSpace slot count) */
 #define SERVICE_CNODE_DEPTH 4u          /* Server cptr bits               */
@@ -21,8 +27,20 @@ typedef enum server_id_e {
 #define SERVICE_CPTR_NTFN   5u          /* Notification slot              */
 #define SERVICE_CPTR_IRQ    6u          /* Primary IRQ handler slot       */
 #define SERVICE_CPTR_IRQ2   7u          /* Secondary IRQ handler slot     */
+#define SERVICE_CPTR_KBD    8u          /* PS/2 kbd server's endpoint     */
+#define SERVICE_CPTR_ATA    9u          /* ATA server's endpoint          */
+#define SERVICE_CPTR_VFS    10u         /* VFS server's endpoint          */
+#define SERVICE_CPTR_TMPFS  11u         /* tmpfs server's endpoint        */
+#define SERVICE_CPTR_EXT2   12u         /* ext2 server's endpoint         */
 
 #define SERVER_NOTE_TYPE    0x4D315256u /* "M1RV"                         */
+
+#define SHM_WIN_BASE      0x60000000u                        /* First shared window address */
+#define SHM_WIN_PG        1u                                 /* Pages per shared window     */
+#define SHM_WIN_SZ        (SHM_WIN_PG * PG_SZ)               /* Shared window size in bytes */
+#define SHM_WIN_VADDR(id) (SHM_WIN_BASE + (id) * SHM_WIN_SZ) /* Shared window address       */
+#define SHM_WIN_ATA       0u                                 /* ATA block transfer window   */
+#define SHM_WIN_CNT       1u                                 /* Shared window count         */
 
 typedef enum resource_type_e {
     RESOURCE_TYPE_NONE    = 0, /* Resource list termination sentinel */
@@ -30,6 +48,7 @@ typedef enum resource_type_e {
     RESOURCE_TYPE_NTFN    = 2, /* arg = Unused                       */
     RESOURCE_TYPE_DEV_FRM = 3, /* arg = Device untyped boot slot     */
     RESOURCE_TYPE_SERV_EP = 4, /* arg = Server ID                    */
+    RESOURCE_TYPE_SHM_WIN = 5, /* arg = Shared window ID             */
 } resource_type_e;
 
 typedef struct resource_s {
@@ -38,7 +57,7 @@ typedef struct resource_s {
     u32 arg;  /* Type-specific argument */
 } resource_s;
 
-#define SERVER_MAX_RES_CNT 4u /* Maximum resource count */
+#define SERVER_MAX_RES_CNT 6u /* Maximum resource count */
 
 typedef struct server_desc_s {
     u32        id;                      /* Server ID                  */
@@ -52,6 +71,7 @@ typedef struct server_desc_s {
 #define RES_NTFN(_slot)               { .type = RESOURCE_TYPE_NTFN,    .slot = (_slot)                     }
 #define RES_DEV_FRM(_slot, _bootslot) { .type = RESOURCE_TYPE_DEV_FRM, .slot = (_slot), .arg = (_bootslot) }
 #define RES_SERV_EP(_slot, _server)   { .type = RESOURCE_TYPE_SERV_EP, .slot = (_slot), .arg = (_server)   }
+#define RES_SHM_WIN(_win)             { .type = RESOURCE_TYPE_SHM_WIN, .slot = 0,       .arg = (_win)      }
 
 #define SERVER_DEF(_id, _prio, _iopl, ...)                                 \
     static __attribute__((__section__(".note"), __used__, __aligned__(4))) \

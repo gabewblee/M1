@@ -1,16 +1,13 @@
+#include <userspace/libc/heap.h>
 #include <userspace/libc/minmax.h>
 #include <userspace/libc/stdio.h>
 #include <userspace/libc/string.h>
 #include <userspace/vfs/dcache.h>
 #include <userspace/vfs/dispatch.h>
 #include <userspace/vfs/file.h>
-#include <userspace/vfs/heap.h>
-#include <userspace/vfs/inode.h>
-#include <userspace/vfs/log.h>
 #include <userspace/vfs/mount.h>
 #include <userspace/vfs/namei.h>
-#include <userspace/vfs/radix.h>
-#include <userspace/vfs/ramfs.h>
+#include <userspace/vfs/rnode.h>
 #include <userspace/vfs/selftest.h>
 #include <userspace/vfs/super.h>
 
@@ -180,20 +177,32 @@ static i32 handle_umount(ipc_msg_s* msg, u32 badge) {
     return rep_stat_only(msg, do_umount(req->path));
 }
 
+static i32 handle_statfs(ipc_msg_s* msg, u32 badge) {
+    vfs_path_req_s* req = (vfs_path_req_s*)msg->payload;
+    req->path[VFS_PATH_MAX - 1] = '\0';
+
+    vfs_statfs_reply_s rep = {0};
+    rep.ret = do_statfs(req->path, &rep.statfs);
+    memcpy(msg->payload, &rep, sizeof(rep));
+    return (i32)sizeof(rep);
+}
+
+static i32 handle_sync(ipc_msg_s* msg, u32 badge) {
+    return rep_stat_only(msg, do_sync());
+}
+
 i32 init(void) {
     heap_init();
-    radix_init();
     dcache_init();
-    icache_init();
+    rnode_init();
     super_init();
     file_init();
-    ramfs_init();
 
-    i32 ret = mount_init("ramfs");
+    i32 ret = mount_init("tmpfs");
     if (ret != E_OK)
         return ret;
 
-    vfs_log("[VFS] Mounted ramfs root\n");
+    dprintf("[VFS] Mounted tmpfs root\n");
     vfs_selftest();
     printf("[VFS] Initialized userspace VFS server\n");
     return E_OK;

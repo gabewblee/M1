@@ -62,15 +62,27 @@ static i32 handle_info(ipc_msg_s* msg, u32 badge) {
     return (i32)sizeof(rep);
 }
 
+static void* xfer_window(const ata_server_req_s* req) {
+    if (req->win != SHM_WIN_ATA)
+        return NULL;
+
+    u32 bytes = (u32)req->cnt * ATA_SECTOR_SZ;
+    if (req->off > SHM_WIN_SZ || bytes > SHM_WIN_SZ - req->off)
+        return NULL;
+
+    return (void*)(SHM_WIN_VADDR(req->win) + req->off);
+}
+
 static i32 handle_read(ipc_msg_s* msg, u32 badge) {
     ata_server_req_s* req = (ata_server_req_s*)msg->payload;
     ata_server_reply_s rep = {0};
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
-    if (!drv || !drv->present) {
+    void* buffer = xfer_window(req);
+    if (!drv || !drv->present || !buffer) {
         rep.ret = -(i32)E_INVAL;
     } else {
-        rep.ret  = ata_pio_read(drv, req->lba, req->cnt, (void*)req->buf);
+        rep.ret  = ata_pio_read(drv, req->lba, req->cnt, buffer);
         rep.done = (rep.ret == E_OK) ? req->cnt : 0;
     }
 
@@ -83,10 +95,11 @@ static i32 handle_write(ipc_msg_s* msg, u32 badge) {
     ata_server_reply_s rep = {0};
 
     ata_drv_s* drv = ata_drv_lookup(req->drv);
-    if (!drv || !drv->present) {
+    void* buffer = xfer_window(req);
+    if (!drv || !drv->present || !buffer) {
         rep.ret = -(i32)E_INVAL;
     } else {
-        rep.ret  = ata_pio_write(drv, req->lba, req->cnt, (void*)req->buf);
+        rep.ret  = ata_pio_write(drv, req->lba, req->cnt, buffer);
         rep.done = (rep.ret == E_OK) ? req->cnt : 0;
     }
 

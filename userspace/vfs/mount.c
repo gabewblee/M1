@@ -1,13 +1,16 @@
+#include <userspace/libc/hash.h>
+#include <userspace/libc/heap.h>
 #include <userspace/vfs/dcache.h>
-#include <userspace/vfs/hash.h>
-#include <userspace/vfs/heap.h>
+#include <userspace/vfs/fsclient.h>
 #include <userspace/vfs/mount.h>
 #include <userspace/vfs/namei.h>
+#include <userspace/vfs/rnode.h>
 #include <userspace/vfs/super.h>
 
 #define MOUNT_BITS 4u
 
 static hlist_head_s buckets[1u << MOUNT_BITS];
+static list_node_s  mounts;
 static cache_s      mount_object_cache;
 static path_s       root;
 
@@ -27,9 +30,11 @@ mount_s* mount_lookup(mount_s* mount, dentry_s* dentry) {
 }
 
 static void mount_free(mount_s* mount) {
-    super_block_s* sb = mount->sb;
+    rsb_s* sb = mount->sb;
+    list_del(&mount->mount_list_node);
+    dcache_prune_sb(sb);
     dput(mount->root);
-    super_kill(sb);
+    rsb_put(sb);
     cache_free(&mount_object_cache, mount);
 }
 
@@ -45,13 +50,42 @@ void mntput(mount_s* mount) {
         mount_free(mount);
 }
 
-static mount_s* mount_make(fstype_s* fstype, u32 flags, const char* source) {
+static dentry_s* root_dentry_make(rsb_s* sb) {
+    fs_entry_reply_s entry;
+    i32 ret = fsc_getattr(sb, sb->root_ino, &entry);
+    if (ret != E_OK)
+        return NULL;
+
+    rnode_s* node = rnode_get(sb, sb->root_ino, entry.mode);
+    if (!node)
+        return NULL;
+
+    qstr_s name = { "/", 1, hash_full_name("/", 1) };
+    dentry_s* dentry = d_alloc(NULL, &name);
+    if (!dentry) {
+        rnode_put(node);
+        return NULL;
+    }
+
+    dentry->sb = sb;
+    d_instantiate(dentry, node);
+    return dentry;
+}
+
+static mount_s* mount_make(const fstype_s* fstype, u32 flags, const char* source) {
     mount_s* mount = cache_alloc(&mount_object_cache);
     if (!mount)
         return NULL;
 
-    dentry_s* dentry = fstype->mount(fstype, flags, source);
+    rsb_s* sb;
+    if (rsb_mount(fstype, source, flags, &sb) != E_OK) {
+        cache_free(&mount_object_cache, mount);
+        return NULL;
+    }
+
+    dentry_s* dentry = root_dentry_make(sb);
     if (!dentry) {
+        rsb_put(sb);
         cache_free(&mount_object_cache, mount);
         return NULL;
     }
@@ -59,17 +93,18 @@ static mount_s* mount_make(fstype_s* fstype, u32 flags, const char* source) {
     mount->count      = 1;
     mount->parent     = NULL;
     mount->mountpoint = NULL;
-    mount->root       = dget(dentry);
-    mount->sb         = dentry->sb;
+    mount->root       = dentry;
+    mount->sb         = sb;
     mount->hash_list_node.next  = NULL;
     mount->hash_list_node.pprev = NULL;
     list_init(&mount->child_list_node);
     list_init(&mount->children);
+    list_add_to_tail(&mount->mount_list_node, &mounts);
     return mount;
 }
 
 i32 do_mount(const char* source, const char* target, const char* name, u32 flags) {
-    fstype_s* fstype = fstype_find(name);
+    const fstype_s* fstype = fstype_find(name);
     if (!fstype)
         return -(i32)E_NODEV;
 
@@ -123,6 +158,29 @@ i32 do_umount(const char* target) {
     return E_OK;
 }
 
+i32 do_statfs(const char* path, vfs_statfs_s* statfs) {
+    path_s where;
+    i32 ret = path_lookup(path, LOOKUP_FOLLOW, &where);
+    if (ret != E_OK)
+        return ret;
+
+    ret = fsc_statfs(where.mount->sb, statfs);
+    path_put(&where);
+    return ret;
+}
+
+i32 do_sync(void) {
+    i32 ret = E_OK;
+    mount_s* mount;
+    list_for_each_entry(mount, &mounts, mount_list_node) {
+        i32 err = fsc_sync(mount->sb);
+        if (err != E_OK && ret == E_OK)
+            ret = err;
+    }
+
+    return ret;
+}
+
 void path_get(path_s* path) {
     mntget(path->mount);
     dget(path->dentry);
@@ -142,8 +200,9 @@ void path_root(path_s* result) {
 
 i32 mount_init(const char* name) {
     cache_init(&mount_object_cache, "mount", sizeof(mount_s));
+    list_init(&mounts);
 
-    fstype_s* fstype = fstype_find(name);
+    const fstype_s* fstype = fstype_find(name);
     if (!fstype)
         return -(i32)E_NODEV;
 

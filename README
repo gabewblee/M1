@@ -57,5 +57,21 @@ kernel/    Core microkernel services
 libk/      Shared kernel code
 loader/    ELF loader
 mm/        Memory management
+tools/     Host-side tools (mkfs_ext2)
 uapi/      Shared kernel/user API
 userspace/ Userspace programs
+
+Userspace Servers
+-----------------
+
+root/      Root task: provisions capabilities and starts all servers
+vga/       VGA text console server
+ps2/       PS/2 keyboard server
+ata/       ATA PIO disk server
+vfs/       Virtual filesystem router: paths, mounts, dentry cache, descriptors
+fs/tmpfs/  RAM-backed filesystem server
+fs/ext2/   Ext2 filesystem server backed by the ATA server
+shell/     Interactive shell with filesystem builtins
+libc/      Minimal C library shared by all servers
+server/    Common IPC dispatch loop
+fs/lib/    Filesystem server library: inode cache, superblocks, dispatcher

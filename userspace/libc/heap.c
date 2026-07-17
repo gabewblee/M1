@@ -1,9 +1,9 @@
 #include <uapi/uapi.h>
-#include <userspace/vfs/heap.h>
+#include <userspace/libc/heap.h>
 
 #define HEAP_CLASSES 8u
 
-static u8 __aligned(PG_SZ) arena[VFS_HEAP_PG * PG_SZ];
+static u8 __aligned(PG_SZ) arena[HEAP_ARENA_PG * PG_SZ];
 static void*      freelist;
 static u32        watermark;
 static u32        spare;
@@ -24,7 +24,7 @@ static void* pg_take(void) {
         return page;
     }
 
-    if (watermark < VFS_HEAP_PG)
+    if (watermark < HEAP_ARENA_PG)
         return &arena[watermark++ * PG_SZ];
 
     return NULL;
@@ -124,7 +124,7 @@ void shrinker_register(shrinker_f shrinker) {
 }
 
 u32 heap_pages_free(void) {
-    return (VFS_HEAP_PG - watermark) + spare;
+    return (HEAP_ARENA_PG - watermark) + spare;
 }
 
 void heap_init(void) {

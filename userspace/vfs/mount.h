@@ -48,6 +48,20 @@ i32 do_mount(const char* source, const char* target, const char* fstype, u32 fla
 i32 do_umount(const char* target);
 
 /**
+ * do_statfs - Fills @statfs for the filesystem containing @path.
+ * @path: The path to query.
+ * @statfs: Filled with the filesystem's statistics.
+ * Returns: E_OK on success, or a negative error code on failure.
+ */
+i32 do_statfs(const char* path, vfs_statfs_s* statfs);
+
+/**
+ * do_sync - Flushes dirty state of every mounted filesystem.
+ * Returns: E_OK on success, or the first negative error code encountered.
+ */
+i32 do_sync(void);
+
+/**
  * path_get - Takes references on both halves of @path.
  * @path: The path to reference.
  */

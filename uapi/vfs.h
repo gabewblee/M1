@@ -21,7 +21,9 @@
     X(15, readdir)        \
     X(16, truncate)       \
     X(17, mount)          \
-    X(18, umount)
+    X(18, umount)         \
+    X(19, statfs)         \
+    X(20, sync)
 
 typedef enum vfs_server_op_e {
 #define VFS_SERVER_OP_ENUM(id, name) VFS_SERVER_OP_##name = (id),
@@ -144,6 +146,19 @@ typedef struct vfs_seek_reply_s {
     i64 offset; /* Resulting offset  */
 } vfs_seek_reply_s;
 
+typedef struct vfs_statfs_s {
+    u32 blocks;    /* Total data blocks   */
+    u32 bfree;     /* Free data blocks    */
+    u32 files;     /* Total inodes        */
+    u32 ffree;     /* Free inodes         */
+    u32 blocksize; /* Block size in bytes */
+} vfs_statfs_s;
+
+typedef struct vfs_statfs_reply_s {
+    i32          ret;    /* Operation status      */
+    vfs_statfs_s statfs; /* Filesystem statistics */
+} vfs_statfs_reply_s;
+
 _Static_assert(sizeof(vfs_path_req_s)     <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_path_req_s size");
 _Static_assert(sizeof(vfs_file_req_s)     <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_file_req_s size");
 _Static_assert(sizeof(vfs_write_req_s)    <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_write_req_s size");
@@ -154,3 +169,4 @@ _Static_assert(sizeof(vfs_stat_reply_s)   <= IPC_PAYLOAD_SZ, "Error: Invalid vfs
 _Static_assert(sizeof(vfs_dirent_reply_s) <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_dirent_reply_s size");
 _Static_assert(sizeof(vfs_data_reply_s)   <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_data_reply_s size");
 _Static_assert(sizeof(vfs_seek_reply_s)   <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_seek_reply_s size");
+_Static_assert(sizeof(vfs_statfs_reply_s) <= IPC_PAYLOAD_SZ, "Error: Invalid vfs_statfs_reply_s size");

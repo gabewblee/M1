@@ -19,8 +19,8 @@
 #include <uapi/errno.h>
 #include <uapi/servers.h>
 
-#define ROOT_RAM_FRM_CNT  1024u    /* Root untyped RAM frame count     */
-#define ROOT_RAM_NBITS    22u      /* log2(ROOT_RAM_FRM_CNT * PG_SZ)   */
+#define ROOT_RAM_FRM_CNT  2048u    /* Root untyped RAM frame count     */
+#define ROOT_RAM_NBITS    23u      /* log2(ROOT_RAM_FRM_CNT * PG_SZ)   */
 #define ROOT_STACK_PG_CNT 4u       /* Root task stack page count       */
 #define ROOT_PRIORITY     8u       /* Root task scheduling priority    */
 #define VGA_PHYS_ADDR     0xB8000u /* VGA framebuffer physical address */

@@ -1,8 +1,8 @@
+#include <userspace/libc/hash.h>
+#include <userspace/libc/heap.h>
 #include <userspace/libc/string.h>
 #include <userspace/vfs/dcache.h>
-#include <userspace/vfs/hash.h>
-#include <userspace/vfs/heap.h>
-#include <userspace/vfs/inode.h>
+#include <userspace/vfs/rnode.h>
 
 #define DCACHE_BITS 8u
 
@@ -29,8 +29,8 @@ static dentry_s* d_kill(dentry_s* dentry) {
 
     hlist_del(&dentry->hash_list_node);
     list_del(&dentry->child_list_node);
-    if (dentry->inode)
-        iput(dentry->inode);
+    if (dentry->node)
+        rnode_put(dentry->node);
 
     d_free(dentry);
     return parent;
@@ -55,7 +55,7 @@ dentry_s* d_alloc(dentry_s* parent, const qstr_s* name) {
 
     dentry->count                = 1;
     dentry->flags                = 0;
-    dentry->inode                = NULL;
+    dentry->node                 = NULL;
     dentry->name.name            = storage;
     dentry->name.len             = name->len;
     dentry->name.hash            = name->hash;
@@ -78,16 +78,16 @@ dentry_s* d_alloc(dentry_s* parent, const qstr_s* name) {
     return dentry;
 }
 
-void d_instantiate(dentry_s* dentry, inode_s* inode) {
-    dentry->inode = inode;
+void d_instantiate(dentry_s* dentry, rnode_s* node) {
+    dentry->node = node;
 }
 
 void d_rehash(dentry_s* dentry) {
     hlist_add_head(&dentry->hash_list_node, d_bucket(dentry->parent, dentry->name.hash));
 }
 
-void d_add(dentry_s* dentry, inode_s* inode) {
-    d_instantiate(dentry, inode);
+void d_add(dentry_s* dentry, rnode_s* node) {
+    d_instantiate(dentry, node);
     d_rehash(dentry);
 }
 
@@ -121,8 +121,8 @@ dentry_s* d_lookup(dentry_s* parent, const qstr_s* name) {
 
 void d_delete(dentry_s* dentry) {
     if (dentry->count == 1) {
-        iput(dentry->inode);
-        dentry->inode = NULL;
+        rnode_put(dentry->node);
+        dentry->node = NULL;
     } else {
         d_drop(dentry);
     }
@@ -172,17 +172,6 @@ int d_is_ancestor(dentry_s* dentry, dentry_s* child) {
     }
 }
 
-void d_genocide(dentry_s* root) {
-    dentry_s *child, *tmp;
-    list_for_each_entry_safe(child, tmp, &root->children, child_list_node) {
-        if (d_is_negative(child))
-            continue;
-
-        d_genocide(child);
-        dput(child);
-    }
-}
-
 dentry_s* dget(dentry_s* dentry) {
     if (!dentry)
         return NULL;
@@ -210,10 +199,15 @@ void dput(dentry_s* dentry) {
     }
 }
 
-u32 dcache_shrink(u32 count) {
+static u32 lru_reclaim(u32 count, const rsb_s* sb) {
     u32 freed = 0;
-    while (freed < count && !list_is_empty(&lru)) {
-        dentry_s* victim = list_first_entry(&lru, dentry_s, lru_list_node);
+    list_node_s* node = lru.next;
+    while (freed < count && node != &lru) {
+        dentry_s* victim = list_entry(node, dentry_s, lru_list_node);
+        node = node->next;
+        if (sb && victim->sb != sb)
+            continue;
+
         list_del(&victim->lru_list_node);
         victim->flags &= ~DENTRY_ONLRU;
 
@@ -223,9 +217,19 @@ u32 dcache_shrink(u32 count) {
 
         statistics.pruned++;
         freed++;
+
+        node = lru.next;
     }
 
     return freed;
+}
+
+u32 dcache_shrink(u32 count) {
+    return lru_reclaim(count, NULL);
+}
+
+void dcache_prune_sb(const rsb_s* sb) {
+    lru_reclaim(SHRINK_ALL, sb);
 }
 
 const dcache_stats_s* dcache_stats(void) {

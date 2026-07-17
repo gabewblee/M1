@@ -1,59 +1,60 @@
+#include <userspace/libc/heap.h>
 #include <userspace/libc/string.h>
-#include <userspace/vfs/heap.h>
-#include <userspace/vfs/inode.h>
+#include <userspace/vfs/fsclient.h>
 #include <userspace/vfs/super.h>
 
-static fstype_s* registry;
-static cache_s   super_object_cache;
-static u32       next_device_number = 1;
+static const fstype_s fstab[] = {
+    { "tmpfs", SERVICE_CPTR_TMPFS },
+    { "ext2",  SERVICE_CPTR_EXT2  },
+};
 
-i32 fstype_register(fstype_s* fstype) {
-    if (fstype_find(fstype->name))
-        return -(i32)E_EXIST;
+static cache_s rsb_object_cache;
+static u32     next_device_number = 1;
 
-    fstype->next = registry;
-    registry = fstype;
-    return E_OK;
-}
-
-fstype_s* fstype_find(const char* name) {
-    for (fstype_s* fstype = registry; fstype; fstype = fstype->next)
-        if (strcmp(fstype->name, name) == 0)
-            return fstype;
+const fstype_s* fstype_find(const char* name) {
+    for (u32 i = 0; i < sizeof(fstab) / sizeof(fstab[0]); i++)
+        if (strcmp(fstab[i].name, name) == 0)
+            return &fstab[i];
 
     return NULL;
 }
 
-super_block_s* super_alloc(const fstype_s* fstype) {
-    super_block_s* sb = cache_alloc(&super_object_cache);
+i32 rsb_mount(const fstype_s* fstype, const char* source, u32 flags, rsb_s** result) {
+    rsb_s* sb = cache_alloc(&rsb_object_cache);
     if (!sb)
-        return NULL;
+        return -(i32)E_NOMEM;
 
-    memset(sb, 0, sizeof(*sb));
-    sb->id                = next_device_number++;
-    sb->blocksize         = PG_SZ;
-    sb->next_inode_number = 1;
-    sb->fstype            = fstype;
-    list_init(&sb->inodes);
+    fs_mount_reply_s reply;
+    i32 ret = fsc_mount(fstype->ep, source, flags, &reply);
+    if (ret != E_OK) {
+        cache_free(&rsb_object_cache, sb);
+        return ret;
+    }
+
+    sb->count     = 1;
+    sb->dev       = next_device_number++;
+    sb->sb        = reply.sb;
+    sb->root_ino  = reply.root;
+    sb->blocksize = reply.blocksize;
+    sb->magic     = reply.magic;
+    sb->fstype    = fstype;
+    *result = sb;
+    return E_OK;
+}
+
+rsb_s* rsb_get(rsb_s* sb) {
+    sb->count++;
     return sb;
 }
 
-void super_kill(super_block_s* sb) {
-    if (sb->fstype->kill)
-        sb->fstype->kill(sb);
+void rsb_put(rsb_s* sb) {
+    if (--sb->count)
+        return;
 
-    while (!list_is_empty(&sb->inodes)) {
-        inode_s* inode = list_first_entry(&sb->inodes, inode_s, sb_list_node);
-        inode_evict(inode);
-    }
-
-    cache_free(&super_object_cache, sb);
-}
-
-u32 super_ino(super_block_s* sb) {
-    return sb->next_inode_number++;
+    fsc_umount(sb);
+    cache_free(&rsb_object_cache, sb);
 }
 
 void super_init(void) {
-    cache_init(&super_object_cache, "super", sizeof(super_block_s));
+    cache_init(&rsb_object_cache, "rsb", sizeof(rsb_s));
 }

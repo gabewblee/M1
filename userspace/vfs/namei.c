@@ -1,10 +1,11 @@
+#include <userspace/libc/hash.h>
 #include <userspace/libc/string.h>
 #include <userspace/vfs/dcache.h>
 #include <userspace/vfs/file.h>
-#include <userspace/vfs/hash.h>
-#include <userspace/vfs/inode.h>
+#include <userspace/vfs/fsclient.h>
 #include <userspace/vfs/mount.h>
 #include <userspace/vfs/namei.h>
+#include <userspace/vfs/rnode.h>
 
 enum { LAST_NORMAL, LAST_ROOT, LAST_DOT, LAST_DOTDOT };
 
@@ -59,18 +60,25 @@ static i32 lookup_dentry(nameidata_s* walk, const qstr_s* name, dentry_s** resul
     dentry_s* parent = walk->path.dentry;
     dentry_s* dentry = d_lookup(parent, name);
     if (!dentry) {
-        inode_s* dir = parent->inode;
-        if (!dir->ops || !dir->ops->lookup)
-            return -(i32)E_NOSYS;
-
         dentry = d_alloc(parent, name);
         if (!dentry)
             return -(i32)E_NOMEM;
 
-        dentry_s* found = dir->ops->lookup(dir, dentry);
-        if (found) {
+        fs_entry_reply_s entry;
+        i32 ret = fsc_lookup(parent->sb, parent->node->ino, name->name, name->len, &entry);
+        if (ret == E_OK) {
+            rnode_s* node = rnode_get(parent->sb, entry.ino, entry.mode);
+            if (!node) {
+                dput(dentry);
+                return -(i32)E_NOMEM;
+            }
+
+            d_add(dentry, node);
+        } else if (ret == -(i32)E_NOENT) {
+            d_add(dentry, NULL);
+        } else {
             dput(dentry);
-            dentry = found;
+            return ret;
         }
     }
 
@@ -159,22 +167,21 @@ static i32 walk_path(nameidata_s* walk, const char* path) {
             return -(i32)E_NOENT;
         }
 
-        inode_s* inode = dentry->inode;
-        if (VFS_ISLNK(inode->mode) && (!final || trailing || (walk->flags & LOOKUP_FOLLOW))) {
+        if (d_is_symlink(dentry) && (!final || trailing || (walk->flags & LOOKUP_FOLLOW))) {
             if (walk->depth >= VFS_SYMLINK_MAX) {
                 dput(dentry);
                 return -(i32)E_LOOP;
             }
 
-            const char* content = (inode->ops && inode->ops->getlink)
-                ? inode->ops->getlink(inode)
-                : NULL;
-
-            if (!content || *content == '\0') {
+            char content[FS_READ_MAX + 1u];
+            rnode_s* node = dentry->node;
+            ret = fsc_readlink(node->sb, node->ino, content, FS_READ_MAX);
+            if (ret <= 0) {
                 dput(dentry);
-                return -(i32)E_NOENT;
+                return (ret < 0) ? ret : -(i32)E_NOENT;
             }
 
+            content[ret] = '\0';
             u32 saved = walk->flags;
             if (!final)
                 walk->flags = LOOKUP_FOLLOW;
@@ -239,6 +246,17 @@ static i32 path_parent(const char* path, nameidata_s* walk) {
     return walk_begin(walk, path, LOOKUP_PARENT);
 }
 
+static i32 instantiate(dentry_s* dentry, const fs_entry_reply_s* entry) {
+    rnode_s* node = rnode_get(dentry->sb, entry->ino, entry->mode);
+    if (!node) {
+        d_drop(dentry);
+        return -(i32)E_NOMEM;
+    }
+
+    d_instantiate(dentry, node);
+    return E_OK;
+}
+
 i32 do_mkdir(const char* path, u32 mode) {
     nameidata_s walk;
     i32 ret = path_parent(path, &walk);
@@ -253,13 +271,16 @@ i32 do_mkdir(const char* path, u32 mode) {
     dentry_s* dentry;
     ret = lookup_dentry(&walk, &walk.last, &dentry);
     if (ret == E_OK) {
-        inode_s* dir = walk.path.dentry->inode;
-        if (!d_is_negative(dentry))
+        rnode_s* dir = walk.path.dentry->node;
+        if (!d_is_negative(dentry)) {
             ret = -(i32)E_EXIST;
-        else if (!dir->ops || !dir->ops->mkdir)
-            ret = -(i32)E_NOSYS;
-        else
-            ret = dir->ops->mkdir(dir, dentry, (mode & ~VFS_IFMT) | VFS_IFDIR);
+        } else {
+            fs_entry_reply_s entry;
+            ret = fsc_mkdir(dir->sb, dir->ino, walk.last.name, walk.last.len,
+                            (mode & ~VFS_IFMT) | VFS_IFDIR, &entry);
+            if (ret == E_OK)
+                ret = instantiate(dentry, &entry);
+        }
 
         dput(dentry);
     }
@@ -282,15 +303,13 @@ i32 do_unlink(const char* path) {
     dentry_s* dentry;
     ret = lookup_dentry(&walk, &walk.last, &dentry);
     if (ret == E_OK) {
-        inode_s* dir = walk.path.dentry->inode;
+        rnode_s* dir = walk.path.dentry->node;
         if (d_is_negative(dentry))
             ret = -(i32)E_NOENT;
         else if (d_is_dir(dentry))
             ret = -(i32)E_ISDIR;
-        else if (!dir->ops || !dir->ops->unlink)
-            ret = -(i32)E_NOSYS;
         else
-            ret = dir->ops->unlink(dir, dentry);
+            ret = fsc_unlink(dir->sb, dir->ino, walk.last.name, walk.last.len);
 
         if (ret == E_OK)
             d_delete(dentry);
@@ -316,17 +335,15 @@ i32 do_rmdir(const char* path) {
     dentry_s* dentry;
     ret = lookup_dentry(&walk, &walk.last, &dentry);
     if (ret == E_OK) {
-        inode_s* dir = walk.path.dentry->inode;
+        rnode_s* dir = walk.path.dentry->node;
         if (d_is_negative(dentry))
             ret = -(i32)E_NOENT;
         else if (!d_is_dir(dentry))
             ret = -(i32)E_NOTDIR;
         else if (d_is_mounted(dentry))
             ret = -(i32)E_BUSY;
-        else if (!dir->ops || !dir->ops->rmdir)
-            ret = -(i32)E_NOSYS;
         else
-            ret = dir->ops->rmdir(dir, dentry);
+            ret = fsc_rmdir(dir->sb, dir->ino, walk.last.name, walk.last.len);
 
         if (ret == E_OK)
             d_delete(dentry);
@@ -361,13 +378,16 @@ i32 do_link(const char* source, const char* target) {
         dentry_s* dentry;
         ret = lookup_dentry(&walk, &walk.last, &dentry);
         if (ret == E_OK) {
-            inode_s* dir = walk.path.dentry->inode;
-            if (!d_is_negative(dentry))
+            rnode_s* dir = walk.path.dentry->node;
+            if (!d_is_negative(dentry)) {
                 ret = -(i32)E_EXIST;
-            else if (!dir->ops || !dir->ops->link)
-                ret = -(i32)E_NOSYS;
-            else
-                ret = dir->ops->link(old.dentry, dir, dentry);
+            } else {
+                fs_entry_reply_s entry;
+                ret = fsc_link(dir->sb, old.dentry->node->ino, dir->ino,
+                               walk.last.name, walk.last.len, &entry);
+                if (ret == E_OK)
+                    ret = instantiate(dentry, &entry);
+            }
 
             dput(dentry);
         }
@@ -395,13 +415,15 @@ i32 do_symlink(const char* content, const char* target) {
     dentry_s* dentry;
     ret = lookup_dentry(&walk, &walk.last, &dentry);
     if (ret == E_OK) {
-        inode_s* dir = walk.path.dentry->inode;
-        if (!d_is_negative(dentry))
+        rnode_s* dir = walk.path.dentry->node;
+        if (!d_is_negative(dentry)) {
             ret = -(i32)E_EXIST;
-        else if (!dir->ops || !dir->ops->symlink)
-            ret = -(i32)E_NOSYS;
-        else
-            ret = dir->ops->symlink(dir, dentry, content);
+        } else {
+            fs_entry_reply_s entry;
+            ret = fsc_symlink(dir->sb, dir->ino, walk.last.name, walk.last.len, content, &entry);
+            if (ret == E_OK)
+                ret = instantiate(dentry, &entry);
+        }
 
         dput(dentry);
     }
@@ -435,8 +457,8 @@ i32 do_rename(const char* source, const char* target) {
     }
 
     if (ret == E_OK) {
-        inode_s* origin      = from.path.dentry->inode;
-        inode_s* destination = to.path.dentry->inode;
+        rnode_s* origin      = from.path.dentry->node;
+        rnode_s* destination = to.path.dentry->node;
         if (d_is_negative(subject))
             ret = -(i32)E_NOENT;
         else if (subject == victim)
@@ -449,10 +471,8 @@ i32 do_rename(const char* source, const char* target) {
             ret = -(i32)E_NOTDIR;
         else if (!d_is_negative(victim) && !d_is_dir(subject) && d_is_dir(victim))
             ret = -(i32)E_ISDIR;
-        else if (!origin->ops || !origin->ops->rename)
-            ret = -(i32)E_NOSYS;
         else {
-            ret = origin->ops->rename(origin, subject, destination, victim);
+            ret = fsc_rename(origin->sb, origin->ino, &from.last, destination->ino, &to.last);
             if (ret == E_OK)
                 d_move(subject, victim);
         }
@@ -474,15 +494,13 @@ i32 do_truncate(const char* path, i64 length) {
     if (ret != E_OK)
         return ret;
 
-    inode_s* inode = where.dentry->inode;
-    if (VFS_ISDIR(inode->mode))
+    rnode_s* node = where.dentry->node;
+    if (VFS_ISDIR(node->mode))
         ret = -(i32)E_ISDIR;
-    else if (!VFS_ISREG(inode->mode))
+    else if (!VFS_ISREG(node->mode))
         ret = -(i32)E_INVAL;
-    else if (!inode->ops || !inode->ops->truncate)
-        ret = -(i32)E_NOSYS;
     else
-        ret = inode->ops->truncate(inode, length);
+        ret = fsc_truncate(node->sb, node->ino, length);
 
     path_put(&where);
     return ret;
@@ -494,25 +512,10 @@ i32 do_readlink(const char* path, char* buffer, u32 size) {
     if (ret != E_OK)
         return ret;
 
-    inode_s* inode = where.dentry->inode;
-    if (!VFS_ISLNK(inode->mode)) {
-        ret = -(i32)E_INVAL;
-    } else {
-        const char* content = (inode->ops && inode->ops->getlink)
-            ? inode->ops->getlink(inode)
-            : NULL;
-
-        if (!content) {
-            ret = -(i32)E_NOSYS;
-        } else {
-            u32 length = (u32)strlen(content);
-            if (length > size)
-                length = size;
-
-            memcpy(buffer, content, length);
-            ret = (i32)length;
-        }
-    }
+    rnode_s* node = where.dentry->node;
+    ret = VFS_ISLNK(node->mode)
+        ? fsc_readlink(node->sb, node->ino, buffer, size)
+        : -(i32)E_INVAL;
 
     path_put(&where);
     return ret;
@@ -524,9 +527,9 @@ i32 do_stat(const char* path, u32 flags, vfs_stat_s* stat) {
     if (ret != E_OK)
         return ret;
 
-    inode_stat(where.dentry->inode, stat);
+    ret = rnode_stat(where.dentry->node, stat);
     path_put(&where);
-    return E_OK;
+    return ret;
 }
 
 i32 do_open(const char* path, u32 flags, u32 mode, file_s** result) {
@@ -552,10 +555,12 @@ i32 do_open(const char* path, u32 flags, u32 mode, file_s** result) {
         }
 
         if (d_is_negative(dentry)) {
-            inode_s* dir = walk.path.dentry->inode;
-            ret = (dir->ops && dir->ops->create)
-                ? dir->ops->create(dir, dentry, (mode & ~VFS_IFMT) | VFS_IFREG)
-                : -(i32)E_NOSYS;
+            rnode_s* dir = walk.path.dentry->node;
+            fs_entry_reply_s entry;
+            ret = fsc_create(dir->sb, dir->ino, walk.last.name, walk.last.len,
+                             (mode & ~VFS_IFMT) | VFS_IFREG, &entry);
+            if (ret == E_OK)
+                ret = instantiate(dentry, &entry);
         } else if (flags & VFS_O_EXCL) {
             ret = -(i32)E_EXIST;
         }
@@ -571,7 +576,7 @@ i32 do_open(const char* path, u32 flags, u32 mode, file_s** result) {
         path_put(&walk.path);
         follow_mounts(&where);
 
-        if (VFS_ISLNK(where.dentry->inode->mode) && !(flags & VFS_O_NOFOLLOW)) {
+        if (d_is_symlink(where.dentry) && !(flags & VFS_O_NOFOLLOW)) {
             path_put(&where);
             ret = path_lookup(path, LOOKUP_FOLLOW, &where);
             if (ret != E_OK)
@@ -587,18 +592,16 @@ i32 do_open(const char* path, u32 flags, u32 mode, file_s** result) {
             return ret;
     }
 
-    inode_s* inode = where.dentry->inode;
+    rnode_s* node = where.dentry->node;
     u32 access = flags & VFS_O_ACCMODE;
-    if (VFS_ISLNK(inode->mode))
+    if (VFS_ISLNK(node->mode))
         ret = -(i32)E_LOOP;
-    else if ((flags & VFS_O_DIRECTORY) && !VFS_ISDIR(inode->mode))
+    else if ((flags & VFS_O_DIRECTORY) && !VFS_ISDIR(node->mode))
         ret = -(i32)E_NOTDIR;
-    else if (VFS_ISDIR(inode->mode) && access != VFS_O_RDONLY)
+    else if (VFS_ISDIR(node->mode) && access != VFS_O_RDONLY)
         ret = -(i32)E_ISDIR;
-    else if ((flags & VFS_O_TRUNC) && VFS_ISREG(inode->mode) && access != VFS_O_RDONLY)
-        ret = (inode->ops && inode->ops->truncate)
-            ? inode->ops->truncate(inode, 0)
-            : -(i32)E_NOSYS;
+    else if ((flags & VFS_O_TRUNC) && VFS_ISREG(node->mode) && access != VFS_O_RDONLY)
+        ret = fsc_truncate(node->sb, node->ino, 0);
 
     if (ret != E_OK) {
         path_put(&where);
