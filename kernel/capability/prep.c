@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <uapi/bootinfo.h>
 #include <uapi/errno.h>
+#include <uapi/exec.h>
 #include <uapi/servers.h>
 
 #define ROOT_RAM_FRM_CNT  2048u    /* Root untyped RAM frame count     */
@@ -147,6 +148,10 @@ static void __init root_task_init(void) {
     vmm_demand_map(BOOTINFO_VADDR, PG_RW_FLAG | PG_USER_FLAG);
     *(bootinfo_s*)BOOTINFO_VADDR = info;
 
+    /* libc startup reads the command line page unconditionally */
+    vmm_demand_map(EXEC_ARGV_VADDR, PG_RW_FLAG | PG_USER_FLAG);
+    memset((void*)EXEC_ARGV_VADDR, 0, PG_SZ);
+
     __asm__ volatile("mov %0, %%cr3" : : "r"(saved) : "memory");
 
     if (!user_thread_create(task, entry, root_stack_top, rslots[BOOT_SLOT_CNODE].capability, 0x202u, ROOT_PRIORITY))
@@ -181,8 +186,8 @@ static void __init root_cspace_init(void) {
     rslots[BOOT_SLOT_VGA_UNTYPED].capability = capability_mk_untyped((void*)__va(VGA_PHYS_ADDR), VGA_UNTYPED_NBITS);
 
     register_multiboot_mods((multiboot_info_t*)__va(mbi));
-    info.magic     = BOOTINFO_MAGIC;
-    info.empty     = nxt;
+    info.magic  = BOOTINFO_MAGIC;
+    info.empty  = nxt;
     info.nempty = (1u << ROOT_CNODE_RADIX) - nxt;
 
     thread_self()->root = rslots[BOOT_SLOT_CNODE].capability;

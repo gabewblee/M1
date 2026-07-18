@@ -11,7 +11,8 @@ typedef enum server_id_e {
     SERVER_ID_tmpfs    = 4, /* tmpfs server ID    */
     SERVER_ID_ext2     = 5, /* ext2 server ID     */
     SERVER_ID_shell    = 6, /* Shell program ID   */
-    SERVER_ID_CNT      = 7, /* Server count       */
+    SERVER_ID_root     = 7, /* Root task ID       */
+    SERVER_ID_CNT      = 8, /* Server count       */
 } server_id_e;
 
 #define SERVER_BADGE(id) ((id) + 1u) /* Endpoint badge of a server */
@@ -32,7 +33,8 @@ typedef enum server_id_e {
 #define SERVICE_CPTR_VFS    10u         /* VFS server's endpoint          */
 #define SERVICE_CPTR_TMPFS  11u         /* tmpfs server's endpoint        */
 #define SERVICE_CPTR_EXT2   12u         /* ext2 server's endpoint         */
-
+#define SERVICE_CPTR_ROOT   13u         /* Root task's spawn endpoint     */
+#define SERVICE_CPTR_EXIT   14u         /* Exit notification slot         */
 #define SERVER_NOTE_TYPE    0x4D315256u /* "M1RV"                         */
 
 #define SHM_WIN_BASE      0x60000000u                        /* First shared window address */

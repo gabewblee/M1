@@ -100,3 +100,23 @@ size_t strlcpy(char* dst, const char* src, size_t size) {
     dst[copy] = '\0';
     return n;
 }
+
+size_t strsplit(char* s, char** fields, size_t count) {
+    size_t n = 0;
+    while (*s && n < count) {
+        while (*s == ' ')
+            *s++ = '\0';
+
+        if (!*s)
+            break;
+
+        fields[n++] = s;
+        while (*s && *s != ' ')
+            s++;
+    }
+
+    if (*s)
+        *s = '\0';
+
+    return n;
+}

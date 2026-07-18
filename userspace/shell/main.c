@@ -13,30 +13,11 @@ SERVER_DEF(
     0,
     RES_SERV_EP(SERVICE_CPTR_VGA, SERVER_ID_vga),
     RES_SERV_EP(SERVICE_CPTR_KBD, SERVER_ID_keyboard),
-    RES_SERV_EP(SERVICE_CPTR_VFS, SERVER_ID_vfs)
+    RES_SERV_EP(SERVICE_CPTR_VFS, SERVER_ID_vfs),
+    RES_SERV_EP(SERVICE_CPTR_ROOT, SERVER_ID_root)
 );
 
 static shell_state_s shell = { .cwd = "/" };
-
-static u32 tokenize(char* line, char** argv) {
-    u32 argc = 0;
-    while (*line && argc < SHELL_ARG_MAX) {
-        while (*line == ' ')
-            *line++ = '\0';
-
-        if (!*line)
-            break;
-
-        argv[argc++] = line;
-        while (*line && *line != ' ')
-            line++;
-    }
-
-    if (*line)
-        *line = '\0';
-
-    return argc;
-}
 
 static void dispatch(u32 argc, char** argv) {
     const builtin_s* builtin = builtin_find(argv[0]);
@@ -80,7 +61,7 @@ int main(void) {
             continue;
 
         char* argv[SHELL_ARG_MAX];
-        u32 argc = tokenize(line, argv);
+        u32 argc = (u32)strsplit(line, argv, SHELL_ARG_MAX);
         if (argc)
             dispatch(argc, argv);
     }

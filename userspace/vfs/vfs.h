@@ -4,7 +4,7 @@
 #include <userspace/libc/list.h>
 
 #define VFS_SYMLINK_MAX 8u   /* Nested symlink resolution limit */
-#define VFS_CLIENT_MAX  9u   /* Badge-indexed client table size */
+#define VFS_CLIENT_MAX  10u  /* Badge-indexed client table size */
 #define VFS_FD_MAX      32u  /* Descriptors per client          */
 #define DENTRY_INLINE   32u  /* Inline dentry name bytes        */
 #define DENTRY_MOUNTED  0x1u /* Dentry is a mountpoint          */

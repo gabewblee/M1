@@ -52,8 +52,10 @@ KERNEL_TARGET   = build/boot/m1.elf
 #----------------------------------------------------------------------------------------------------
 
 LIBC_SRCS = userspace/libc/capability.c \
+            userspace/libc/exec.c       \
             userspace/libc/heap.c       \
             userspace/libc/minmax.c     \
+            userspace/libc/start.c      \
             userspace/libc/stdio.c      \
             userspace/libc/string.c     \
             userspace/libc/syscall.c    \
@@ -145,13 +147,18 @@ ATA_C_OBJS = $(ATA_SRCS:%.c=build/%.o)
 ATA_OBJS   = $(LIBC_OBJS) $(SERVER_OBJS) $(ATA_C_OBJS) $(STARTUP_ASMS_OBJS)
 ATA_TARGET = build/userspace/ata/ata.elf
 
+HELLO_SRCS   = userspace/hello/main.c
+HELLO_C_OBJS = $(HELLO_SRCS:%.c=build/%.o)
+HELLO_OBJS   = $(LIBC_OBJS) $(HELLO_C_OBJS) $(STARTUP_ASMS_OBJS)
+HELLO_TARGET = build/userspace/hello/hello.elf
+
 MKFS_SRCS   = tools/mkfs_ext2.c
 MKFS_TARGET = build/tools/mkfs_ext2
 
 ISO_ELFS = m1.elf root.elf vga.elf keyboard.elf ata.elf vfs.elf tmpfs.elf ext2.elf shell.elf
 ISO      = $(ISO_ELFS:%=iso/boot/%)
 TARGETS  = $(KERNEL_TARGET) $(ROOT_TARGET) $(VGA_TARGET) $(PS2_TARGET) $(ATA_TARGET) \
-           $(VFS_TARGET) $(TMPFS_TARGET) $(EXT2_TARGET) $(SHELL_TARGET)
+           $(VFS_TARGET) $(TMPFS_TARGET) $(EXT2_TARGET) $(SHELL_TARGET) $(HELLO_TARGET)
 
 #----------------------------------------------------------------------------------------------------
 # Build targets
@@ -173,9 +180,9 @@ test: iso/boot/grub/grub.cfg $(TARGETS) $(ATA_IMG)
         -serial file:build/serial.log -display none -monitor none -no-reboot </dev/null >/dev/null 2>&1
 	@cat build/serial.log
 
-$(ATA_IMG): $(MKFS_TARGET)
+$(ATA_IMG): $(MKFS_TARGET) $(HELLO_TARGET)
 	@mkdir -p $(dir $@)
-	$(MKFS_TARGET) $@ $(ATA_IMG_SZ)
+	$(MKFS_TARGET) $@ $(ATA_IMG_SZ) $(HELLO_TARGET)
 
 $(MKFS_TARGET): $(MKFS_SRCS)
 	@mkdir -p $(dir $@)
@@ -226,9 +233,13 @@ $(SHELL_TARGET): $(SHELL_OBJS)
 	$(I686_ELF_LD) $(USER_LDFLAGS) $(SHELL_OBJS) -o $@
 	cp $@ iso/boot/shell.elf
 
+$(HELLO_TARGET): $(HELLO_OBJS)
+	@mkdir -p $(dir $@)
+	$(I686_ELF_LD) $(USER_LDFLAGS) $(HELLO_OBJS) -o $@
+
 USER_C_OBJS = $(LIBC_OBJS) $(SERVER_OBJS) $(FSLIB_OBJS) $(PS2_C_OBJS) $(VGA_C_OBJS)  \
               $(VFS_C_OBJS) $(TMPFS_C_OBJS) $(EXT2_C_OBJS) $(SHELL_C_OBJS)           \
-              $(ROOT_C_OBJS) $(ATA_C_OBJS)
+              $(ROOT_C_OBJS) $(ATA_C_OBJS) $(HELLO_C_OBJS)
 
 $(USER_C_OBJS): build/%.o: %.c
 	@mkdir -p $(dir $@)

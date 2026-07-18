@@ -1,4 +1,6 @@
 #include <uapi/errno.h>
+#include <uapi/exec.h>
+#include <userspace/libc/exec.h>
 #include <userspace/libc/minmax.h>
 #include <userspace/libc/stdio.h>
 #include <userspace/libc/string.h>
@@ -418,6 +420,26 @@ static i32 do_umount(shell_state_s* shell, u32 argc, char** argv) {
     return report("umount", argv[1], vfs_umount(target));
 }
 
+static i32 do_run(shell_state_s* shell, u32 argc, char** argv) {
+    char cmdline[EXEC_CMDLINE_MAX];
+    i32 ret = resolve(shell, argv[1], cmdline);
+    if (ret != E_OK)
+        return ret;
+
+    u32 len = (u32)strlen(cmdline);
+    for (u32 i = 2; i < argc; i++) {
+        u32 wlen = (u32)strlen(argv[i]);
+        if (len + wlen + 2u > sizeof(cmdline))
+            return report("run", argv[i], -(i32)E_NAMELONG);
+
+        cmdline[len++] = ' ';
+        memcpy(cmdline + len, argv[i], wlen + 1u);
+        len += wlen;
+    }
+
+    return report("run", argv[1], root_spawn(cmdline));
+}
+
 static const builtin_s builtins[] = {
     { "help",     "",                            "List available commands",       1, 1,             do_help     },
     { "clear",    "",                            "Clear the screen",              1, 1,             do_clear    },
@@ -440,6 +462,7 @@ static const builtin_s builtins[] = {
     { "sync",     "",                            "Flush filesystem caches",       1, 1,             do_sync     },
     { "mount",    "<fstype> <source> <target>",  "Mount a filesystem",            4, 4,             do_mount    },
     { "umount",   "<target>",                    "Unmount a filesystem",          2, 2,             do_umount   },
+    { "run",      "<program> [arg]...",          "Run a program from disk",       2, SHELL_ARG_MAX, do_run      },
 };
 
 const builtin_s* builtin_find(const char* name) {

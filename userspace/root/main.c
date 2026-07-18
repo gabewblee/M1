@@ -5,11 +5,13 @@
 #include <uapi/capability.h>
 #include <uapi/elf.h>
 #include <uapi/errno.h>
+#include <uapi/exec.h>
 #include <uapi/servers.h>
 #include <userspace/libc/capability.h>
 #include <userspace/libc/minmax.h>
 #include <userspace/libc/string.h>
 #include <userspace/libc/syscall.h>
+#include <userspace/libc/vfs.h>
 
 #define ROOT_IMG_BASE     0x40000000u
 #define ROOT_CP_BASE      0x40400000u
@@ -19,6 +21,8 @@
 #define PG_DIR_IDX(vaddr) ((vaddr) >> 22)
 #define PG_DIR_CNT        1024u
 #define HIGHER_HALF_IDX   768u
+#define EXEC_IMG_MAX      (256u * 1024u)
+#define EXEC_PRIORITY     1u
 
 typedef struct modinfo_s {
     u32 cnode;  /* CNode root slot    */
@@ -33,9 +37,15 @@ static u32               end; /* One past the last usable slot */
 static modinfo_s         infos[BOOTINFO_MAX_MOD_CNT];
 static u32               shm_frms[SHM_WIN_CNT][SHM_WIN_PG];
 static u8                shm_tabled[BOOTINFO_MAX_MOD_CNT];
+static u32               root_ep;    /* Spawn service endpoint     */
+static u32               root_reply; /* Spawn service reply object */
+static u32               exit_ntfn;  /* Child exit notification    */
+static u8                exec_buf[EXEC_IMG_MAX];
 
 _Static_assert(PG_DIR_IDX(SHM_WIN_VADDR(SHM_WIN_CNT) - 1u) == PG_DIR_IDX(SHM_WIN_BASE),
                "Error: Shared windows must share one page table");
+_Static_assert(PG_DIR_IDX(EXEC_ARGV_VADDR) == PG_DIR_IDX(SERVER_STACK_TOP - 1u),
+               "Error: Command line page must share the stack's page table");
 
 static u32 cstrlen(const char* s) {
     u32 n;
@@ -252,6 +262,12 @@ static void wire(u32 i) {
                 break;
 
             case RESOURCE_TYPE_SERV_EP: {
+                /* Root is not a boot module; its spawn endpoint stands in */
+                if (res->arg == SERVER_ID_root) {
+                    mint_capability_into(root_ep, info->cnode, res->slot, info->badge);
+                    break;
+                }
+
                 i32 target = find_ctx(res->arg);
                 if (target < 0)
                     fatal("Unknown server dependency");
@@ -270,6 +286,39 @@ static void wire(u32 i) {
     }
 }
 
+static void map_stack(u32 vspace) {
+    for (u32 s = 0; s < SERVER_STACK_PG; s++) {
+        u32 frm = mk_obj(CAPABILITY_TYPE_FRM, 0);
+        if (map_pg(frm, vspace, ROOT_CNODE_RADIX, SERVER_STACK_TOP - (s + 1) * PG_SZ, PG_RW_FLAG) != E_OK)
+            fatal("Failed to map page");
+    }
+}
+
+static void map_cmdline(u32 vspace, const char* cmdline) {
+    u32 frm = mk_obj(CAPABILITY_TYPE_FRM, 0);
+    if (cmdline && *cmdline) {
+        if (map_pg(frm, BOOT_SLOT_VSPACE, ROOT_CNODE_RADIX, ROOT_CP_BASE, PG_RW_FLAG) != E_OK)
+            fatal("Failed to map page");
+
+        strlcpy((char*)ROOT_CP_BASE, cmdline, EXEC_CMDLINE_MAX);
+        unmap_pg(frm, BOOT_SLOT_VSPACE, ROOT_CNODE_RADIX, ROOT_CP_BASE);
+    }
+
+    if (map_pg(frm, vspace, ROOT_CNODE_RADIX, EXEC_ARGV_VADDR, 0) != E_OK)
+        fatal("Failed to map command line page");
+}
+
+static u32 spawn_thread(u32 cnode, u32 vspace, u32 entry, u32 priority) {
+    u32 tcb = mk_obj(CAPABILITY_TYPE_TCB, 0);
+    if (tcb_configure(tcb, cnode, ROOT_CNODE_RADIX, vspace, ROOT_CNODE_RADIX, entry, SERVER_STACK_TOP, priority) != E_OK)
+        fatal("Failed to configure TCB");
+
+    if (tcb_resume(tcb) != E_OK)
+        fatal("Failed to resume TCB");
+
+    return tcb;
+}
+
 static void start(u32 i) {
     const mod_s* mod = &bi->mods[i];
     modinfo_s* info = &infos[i];
@@ -277,27 +326,173 @@ static void start(u32 i) {
     const u8* img = map_img_pgs(mod->frm, mod->nfrms);
     u32 entry = load_elf(img, info->vspace);
     unmap_img_pgs(mod->frm, mod->nfrms);
-    for (u32 s = 0; s < SERVER_STACK_PG; s++) {
-        u32 frm = mk_obj(CAPABILITY_TYPE_FRM, 0);
-        if (map_pg(frm, info->vspace, ROOT_CNODE_RADIX, SERVER_STACK_TOP - (s + 1) * PG_SZ, PG_RW_FLAG) != E_OK)
-            fatal("Failed to map page");
+    map_stack(info->vspace);
+    map_cmdline(info->vspace, NULL);
+    spawn_thread(info->cnode, info->vspace, entry, mod->desc.priority);
+}
+
+static i32 validate_elf(const u8* image, u32 sz) {
+    const elf32_ehdr_s* eh = (const elf32_ehdr_s*)image;
+    if (sz < sizeof(elf32_ehdr_s)      ||
+        eh->e_ident[EI_MAG0]  != ELFMAG0 ||
+        eh->e_ident[EI_MAG1]  != ELFMAG1 ||
+        eh->e_ident[EI_MAG2]  != ELFMAG2 ||
+        eh->e_ident[EI_MAG3]  != ELFMAG3 ||
+        eh->e_ident[EI_CLASS] != ELFCLASS32 ||
+        eh->e_type            != ET_EXEC    ||
+        eh->e_machine         != EM_386)
+        return -(i32)E_INVAL;
+
+    if (eh->e_phoff > sz || (u32)eh->e_phnum * sizeof(elf32_phdr_s) > sz - eh->e_phoff)
+        return -(i32)E_INVAL;
+
+    const elf32_phdr_s* ph = (const elf32_phdr_s*)(image + eh->e_phoff);
+    for (u16 i = 0; i < eh->e_phnum; i++) {
+        if (ph[i].p_type != PT_LOAD || ph[i].p_memsz == 0)
+            continue;
+
+        if (ph[i].p_offset > sz || ph[i].p_filesz > sz - ph[i].p_offset)
+            return -(i32)E_INVAL;
+
+        if (ph[i].p_vaddr + ph[i].p_memsz < ph[i].p_vaddr ||
+            PG_DIR_IDX(ph[i].p_vaddr + ph[i].p_memsz - 1u) >= HIGHER_HALF_IDX ||
+            ph[i].p_vaddr + ph[i].p_memsz > EXEC_ARGV_VADDR)
+            return -(i32)E_INVAL;
     }
 
-    u32 tcb = mk_obj(CAPABILITY_TYPE_TCB, 0);
-    if (tcb_configure(
-            tcb,
-            info->cnode,
-            ROOT_CNODE_RADIX,
-            info->vspace,
-            ROOT_CNODE_RADIX,
-            entry,
-            SERVER_STACK_TOP,
-            mod->desc.priority
-        ) != E_OK)
-        fatal("Failed to configure TCB");
+    return E_OK;
+}
 
-    if (tcb_resume(tcb) != E_OK)
-        fatal("Failed to resume TCB");
+static void mint_service(u32 cnode, u32 slot, u32 server_id) {
+    i32 target = find_ctx(server_id);
+    if (target >= 0)
+        mint_capability_into(infos[target].ep, cnode, slot, EXEC_BADGE);
+}
+
+static i32 fetch_program(const char* path, u32* sz) {
+    i32 fd = vfs_open(path, VFS_O_RDONLY, 0);
+    if (fd < 0)
+        return fd;
+
+    i32 got = vfs_read(fd, exec_buf, sizeof(exec_buf));
+    vfs_close(fd);
+    if (got < 0)
+        return got;
+
+    /* A full buffer means the image was truncated */
+    if ((u32)got >= sizeof(exec_buf))
+        return -(i32)E_NOMEM;
+
+    *sz = (u32)got;
+    return E_OK;
+}
+
+/**
+ * spawn - Loads and runs the program named by @cmdline until it exits.
+ *
+ * Each spawned process gets a fresh CSpace and VSpace, badged endpoints for
+ * the VGA, keyboard, and VFS services, the exit notification, and the command
+ * line mapped read-only at EXEC_ARGV_VADDR. The caller stays blocked in its
+ * Call until the process signals the exit notification from libc startup, so
+ * spawns are strictly sequential. Capability slots consumed by a process are
+ * not yet reclaimed when it exits.
+ */
+static i32 spawn(const char* cmdline) {
+    char path[EXEC_CMDLINE_MAX];
+    strlcpy(path, cmdline, sizeof(path));
+    for (u32 i = 0; path[i]; i++)
+        if (path[i] == ' ') {
+            path[i] = '\0';
+            break;
+        }
+
+    u32 sz = 0;
+    i32 ret = fetch_program(path, &sz);
+    if (ret != E_OK)
+        return ret;
+
+    ret = validate_elf(exec_buf, sz);
+    if (ret != E_OK)
+        return ret;
+
+    u32 cnode  = mk_obj(CAPABILITY_TYPE_CNODE, SERVICE_CNODE_RADIX);
+    u32 vspace = mk_obj(CAPABILITY_TYPE_PG_DIR, 0);
+    mint_service(cnode, SERVICE_CPTR_VGA, SERVER_ID_vga);
+    mint_service(cnode, SERVICE_CPTR_KBD, SERVER_ID_keyboard);
+    mint_service(cnode, SERVICE_CPTR_VFS, SERVER_ID_vfs);
+    mint_capability_into(exit_ntfn, cnode, SERVICE_CPTR_EXIT, 0);
+
+    u32 entry = load_elf(exec_buf, vspace);
+    map_stack(vspace);
+    map_cmdline(vspace, cmdline);
+    spawn_thread(cnode, vspace, entry, EXEC_PRIORITY);
+
+    u32 signals = 0;
+    if (sys_wait(exit_ntfn, &signals) != E_OK)
+        return -(i32)E_FAULT;
+
+    return E_OK;
+}
+
+static i32 handle_spawn(ipc_msg_s* msg, u32 len) {
+    root_spawn_req_s req = {0};
+    memcpy(&req, msg->payload, min(len, (u32)sizeof(req)));
+    req.cmdline[sizeof(req.cmdline) - 1u] = '\0';
+
+    i32 status = spawn(req.cmdline);
+    memcpy(msg->payload, &status, sizeof(status));
+    return (i32)sizeof(status);
+}
+
+static void __noreturn serve(void) {
+    ipc_msg_s msg;
+    u32 badge = 0;
+    i32 mi = sys_recv(root_ep, root_reply, &msg, &badge, 0);
+    for (;;) {
+        if (mi < 0) {
+            mi = sys_recv(root_ep, root_reply, &msg, &badge, 0);
+            continue;
+        }
+
+        i32 len = -(i32)E_NOSYS;
+        if (get_msg_label((msg_info_t)mi) == ROOT_SERVER_OP_spawn)
+            len = handle_spawn(&msg, get_msg_len((msg_info_t)mi));
+
+        if (len < 0) {
+            memcpy(msg.payload, &len, sizeof(len));
+            len = (i32)sizeof(len);
+        }
+
+        mi = sys_replyrecv(root_ep, root_reply, mk_msg_info(0, 0, (u32)len), &msg, &badge);
+    }
+}
+
+static void spawn_service_init(void) {
+    root_ep    = mk_obj(CAPABILITY_TYPE_ENDPOINT, 0);
+    root_reply = mk_obj(CAPABILITY_TYPE_REPLY, 0);
+    exit_ntfn  = mk_obj(CAPABILITY_TYPE_NTFN, 0);
+}
+
+static void vfs_service_init(void) {
+    i32 vfs = find_ctx(SERVER_ID_vfs);
+    if (vfs < 0)
+        fatal("No VFS server module");
+
+    u32 slot = alloc_capability_slot();
+    bool ok = capability_mint(
+        BOOT_SLOT_CNODE,
+        slot,
+        ROOT_CNODE_RADIX,
+        infos[vfs].ep,
+        ROOT_CNODE_RADIX,
+        CAPABILITY_RIGHTS_ALL,
+        SERVER_BADGE(SERVER_ID_root)
+    ) == E_OK;
+
+    if (!ok)
+        fatal("Failed to mint VFS endpoint");
+
+    vfs_client_init(slot);
 }
 
 int main(void) {
@@ -320,12 +515,14 @@ int main(void) {
     for (u32 i = 0; i < bi->nmods; i++)
         provision(i);
 
+    spawn_service_init();
     for (u32 i = 0; i < bi->nmods; i++)
         wire(i);
 
     for (u32 i = 0; i < bi->nmods; i++)
         start(i);
 
+    vfs_service_init();
     log("[ROOT] Initialized all servers\n");
-    return E_OK;
+    serve();
 }

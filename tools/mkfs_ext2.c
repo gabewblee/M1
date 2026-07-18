@@ -14,9 +14,13 @@
 #define FIRST_INO        11u
 #define EXT2_MAGIC       0xEF53u
 #define EXT2_VALID_FS    1u
+#define EXT2_FT_REG      1u
 #define EXT2_FT_DIR      2u
 #define EXT2_DYNAMIC_REV 1u
 #define FEATURE_FILETYPE 0x0002u
+#define PTRS_PER_BLOCK   (BLOCK_SIZE / 4u)
+#define IND_BLOCK        12u
+#define DIND_BLOCK       13u
 
 #define GD_PER_BLOCK     (BLOCK_SIZE / 32u)
 #define ITB_BLOCKS       (INODES_PER_GROUP * INODE_SIZE / BLOCK_SIZE)
@@ -98,9 +102,14 @@ typedef struct dirent {
     char     name[4];
 } dirent;
 
-static uint8_t* image;
-static uint32_t total_blocks;
-static uint32_t groups;
+static uint8_t*   image;
+static uint32_t   total_blocks;
+static uint32_t   groups;
+static groupdesc* gd;
+static uint32_t   free_blocks;
+static uint32_t   free_inodes;
+static uint32_t   next_ino;
+static uint32_t   root_block;
 
 static uint8_t* block_at(uint32_t block) {
     return image + (size_t)block * BLOCK_SIZE;
@@ -121,9 +130,132 @@ static void bitmap_set(uint8_t* bitmap, uint32_t bit) {
     bitmap[bit >> 3] |= (uint8_t)(1u << (bit & 7u));
 }
 
+static int bitmap_get(const uint8_t* bitmap, uint32_t bit) {
+    return (bitmap[bit >> 3] >> (bit & 7u)) & 1u;
+}
+
+static uint32_t alloc_block(void) {
+    for (uint32_t g = 0; g < groups; g++) {
+        uint8_t* bbm = block_at(gd[g].bg_block_bitmap);
+        for (uint32_t b = 0; b < blocks_in_group(g); b++) {
+            if (bitmap_get(bbm, b))
+                continue;
+
+            bitmap_set(bbm, b);
+            gd[g].bg_free_blocks_count--;
+            free_blocks--;
+            return group_base(g) + b;
+        }
+    }
+
+    fprintf(stderr, "mkfs_ext2: out of blocks\n");
+    exit(1);
+}
+
+static dinode* alloc_inode(uint32_t* ino) {
+    *ino = next_ino++;
+    uint32_t group = (*ino - 1u) / INODES_PER_GROUP;
+    uint32_t index = (*ino - 1u) % INODES_PER_GROUP;
+    bitmap_set(block_at(gd[group].bg_inode_bitmap), index);
+    gd[group].bg_free_inodes_count--;
+    free_inodes--;
+    return (dinode*)block_at(gd[group].bg_inode_table) + index;
+}
+
+static void inode_add_block(dinode* node, uint32_t index, uint32_t block) {
+    if (index < IND_BLOCK) {
+        node->i_block[index] = block;
+        return;
+    }
+
+    index -= IND_BLOCK;
+    if (index < PTRS_PER_BLOCK) {
+        if (!node->i_block[IND_BLOCK]) {
+            node->i_block[IND_BLOCK] = alloc_block();
+            node->i_blocks += BLOCK_SIZE / 512u;
+        }
+
+        ((uint32_t*)block_at(node->i_block[IND_BLOCK]))[index] = block;
+        return;
+    }
+
+    index -= PTRS_PER_BLOCK;
+    if (!node->i_block[DIND_BLOCK]) {
+        node->i_block[DIND_BLOCK] = alloc_block();
+        node->i_blocks += BLOCK_SIZE / 512u;
+    }
+
+    uint32_t* outer = (uint32_t*)block_at(node->i_block[DIND_BLOCK]);
+    if (!outer[index / PTRS_PER_BLOCK]) {
+        outer[index / PTRS_PER_BLOCK] = alloc_block();
+        node->i_blocks += BLOCK_SIZE / 512u;
+    }
+
+    ((uint32_t*)block_at(outer[index / PTRS_PER_BLOCK]))[index % PTRS_PER_BLOCK] = block;
+}
+
+static void root_add_dirent(uint32_t ino, const char* name, uint8_t ftype) {
+    uint8_t  namelen = (uint8_t)strlen(name);
+    uint16_t needed  = (uint16_t)((8u + namelen + 3u) & ~3u);
+    dirent*  entry   = (dirent*)block_at(root_block);
+
+    for (;;) {
+        uint16_t used = (uint16_t)((8u + entry->name_len + 3u) & ~3u);
+        if (entry->rec_len >= used + needed) {
+            dirent* next = (dirent*)((uint8_t*)entry + used);
+            next->inode     = ino;
+            next->rec_len   = (uint16_t)(entry->rec_len - used);
+            next->name_len  = namelen;
+            next->file_type = ftype;
+            memcpy(next->name, name, namelen);
+            entry->rec_len = used;
+            return;
+        }
+
+        entry = (dirent*)((uint8_t*)entry + entry->rec_len);
+        if ((uint8_t*)entry >= block_at(root_block) + BLOCK_SIZE) {
+            fprintf(stderr, "mkfs_ext2: root directory full\n");
+            exit(1);
+        }
+    }
+}
+
+static const char* basename_of(const char* path) {
+    const char* slash = strrchr(path, '/');
+    return slash ? slash + 1u : path;
+}
+
+static void seed_file(const char* path) {
+    FILE* in = fopen(path, "rb");
+    if (!in) {
+        fprintf(stderr, "mkfs_ext2: %s: %s\n", path, strerror(errno));
+        exit(1);
+    }
+
+    uint32_t ino;
+    dinode*  node = alloc_inode(&ino);
+    node->i_mode        = 0100755;
+    node->i_links_count = 1;
+
+    uint8_t  buffer[BLOCK_SIZE];
+    size_t   got;
+    uint32_t index = 0;
+    while ((got = fread(buffer, 1, sizeof(buffer), in)) > 0) {
+        uint32_t block = alloc_block();
+        memcpy(block_at(block), buffer, got);
+        inode_add_block(node, index++, block);
+        node->i_blocks += BLOCK_SIZE / 512u;
+        node->i_size   += (uint32_t)got;
+    }
+
+    fclose(in);
+    root_add_dirent(ino, basename_of(path), EXT2_FT_REG);
+    printf("mkfs_ext2: seeded /%s (%u bytes, inode %u)\n", basename_of(path), node->i_size, ino);
+}
+
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        fprintf(stderr, "usage: %s <image> <size-mb>\n", argv[0]);
+    if (argc < 3) {
+        fprintf(stderr, "usage: %s <image> <size-mb> [file]...\n", argv[0]);
         return 1;
     }
 
@@ -142,8 +274,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    groupdesc* gd = (groupdesc*)block_at(FIRST_DATA_BLOCK + 1u);
-    uint32_t free_blocks = 0;
+    gd = (groupdesc*)block_at(FIRST_DATA_BLOCK + 1u);
     for (uint32_t g = 0; g < groups; g++) {
         uint32_t base = group_base(g);
         gd[g].bg_block_bitmap = base + 2u;
@@ -173,8 +304,10 @@ int main(int argc, char** argv) {
 
     gd[0].bg_free_inodes_count = (uint16_t)(INODES_PER_GROUP - (FIRST_INO - 1u));
     gd[0].bg_used_dirs_count   = 1;
+    free_inodes = groups * INODES_PER_GROUP - (FIRST_INO - 1u);
+    next_ino    = FIRST_INO;
 
-    uint32_t root_block = group_base(0) + GROUP_OVERHEAD;
+    root_block = group_base(0) + GROUP_OVERHEAD;
     bitmap_set(block_at(gd[0].bg_block_bitmap), GROUP_OVERHEAD);
     gd[0].bg_free_blocks_count--;
     free_blocks--;
@@ -200,11 +333,14 @@ int main(int argc, char** argv) {
     dotdot->file_type = EXT2_FT_DIR;
     memcpy(dotdot->name, "..", 2);
 
+    for (int i = 3; i < argc; i++)
+        seed_file(argv[i]);
+
     superblock* sb = (superblock*)(image + 1024);
     sb->s_inodes_count      = groups * INODES_PER_GROUP;
     sb->s_blocks_count      = total_blocks;
     sb->s_free_blocks_count = free_blocks;
-    sb->s_free_inodes_count = sb->s_inodes_count - (FIRST_INO - 1u);
+    sb->s_free_inodes_count = free_inodes;
     sb->s_first_data_block  = FIRST_DATA_BLOCK;
     sb->s_log_block_size    = BLOCK_LOG;
     sb->s_log_frag_size     = BLOCK_LOG;

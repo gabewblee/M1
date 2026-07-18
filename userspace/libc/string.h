@@ -81,3 +81,14 @@ char* strchr(const char* s, int c);
  * Returns: The length of @src.
  */
 size_t strlcpy(char* dst, const char* src, size_t size);
+
+/**
+ * strsplit - Splits @s on spaces in place, storing up to @count field
+ *            pointers in @fields. Runs of spaces are collapsed and
+ *            overwritten with NULs; any excess fields are truncated away.
+ * @s: The string to split, modified in place.
+ * @fields: The destination field pointer array.
+ * @count: The capacity of @fields.
+ * Returns: The number of fields stored.
+ */
+size_t strsplit(char* s, char** fields, size_t count);

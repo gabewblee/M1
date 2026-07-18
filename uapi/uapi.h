@@ -3,6 +3,7 @@
 #include <ata.h>
 #include <compiler.h>
 #include <errno.h>
+#include <exec.h>
 #include <fs.h>
 #include <io.h>
 #include <ipc.h>
